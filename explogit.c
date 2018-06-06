@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <omp.h>
 #include "explogit.h"
 
 
@@ -19,9 +20,6 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	/* Return value -- loglikelihood (matrix of one element) */
 	double loglik;
 
-	/* Two arrays mapping the structure of the short stack and related pointers */
-	int *nskipped_first, *nlisted_first;
-
 	/* Various dimensions of data */
 	size_t num_choices;
 
@@ -34,7 +32,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	double *pr_type, *pr_type_first; /* Same probability, but conditional on type */
 	
 	/* Workspace for computing components of the gradient and the logit shares */
-	double *numer, *dpr_type_db, *dpr_type_db_first, *dpr_mult,\
+	double *dpr_type_db, *dpr_type_db_first, *numer, *dpr_mult, \
 		denom, expu, xb, pr_cur, x, p_ratio;
 	
 	/* Generic indices */
@@ -81,17 +79,10 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	 * probabilities. Therefore, we have to store some of the gradient's components */
 	pr_first = (double *)calloc(num_students, sizeof(double));
 	pr_type_first = (double *)malloc(num_students*num_types*sizeof(double));
-	u_first = (double *)malloc(num_choices*sizeof(double));
-	
-	dpr_mult = (double *)malloc(num_covariates*sizeof(double));
 	
 	/* Derivatives of the conditional choice probability, by student and type */
 	dpr_type_db_first = (double *)calloc(num_students*num_types*num_covariates,\
 		sizeof(double));
-	
-	/* One component of the gradient is a sum of fractions. This is a workspace for 
-	 * computing the numerator for these fractions. */
-	numer = (double *)malloc(num_covariates*sizeof(double));
 	
 	/* This is where we accumulate the gradient w.r.t. the type weight parameters */
 	dldw = (double *)calloc(num_types, sizeof(double));
@@ -100,22 +91,29 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	dldb_first = (double *)calloc(num_types*num_covariates, sizeof(double));
 	
 	/* Initialize pointers */
-	u_last = u_first + num_choices;
-	nskipped_first = nskipped;
-	nlisted_first = nlisted;
+	
+	pr = pr_first;
 	X_first = X;
 	X_last = X_first + num_covariates*num_choices;
 	pr_type = pr_type_first;
 	dpr_type_db = dpr_type_db_first;
-
+	
+	#pragma omp parallel for \
+		private(u, u_first, u_bound, u_last, w_cur, xb, beta, denom, logpr_type, numer, dpr_mult, expu, i, j, pr_cur, k) \
+		shared(X_last, X_first, num_choices, num_covariates) \
+		firstprivate(nskipped, nlisted, X, pr, beta_type, dpr_type_db)
 	for (i=0; i<num_types; i++) {
 		
-		/* Reset pointers */
-		nskipped = nskipped_first;
-		nlisted = nlisted_first;
-		X = X_first;
-		pr = pr_first;
+		k = 0;
+		beta_type += i*num_covariates;
+		dpr_type_db += i*num_students*num_covariates;
+		
+		u_first = (double *)malloc(num_choices*sizeof(double));
+		numer = (double *)malloc(num_covariates*sizeof(double));
+		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
+		
 		u = u_first;
+		u_last = u_first + num_choices;
 		
 		w_cur = w_t[i];
 		
@@ -130,7 +128,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 			*u++ = xb;
 		}
 		/* Move beta vector pointer to the next type's position */
-		beta_type += num_covariates;
+		
 
 		/* Reset pointers */
 		u = u_first;
@@ -176,16 +174,21 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 				logpr_type += xb - log(denom);
 			}
 			
+			
 			for (j=0; j<num_covariates; j++) {
 				*dpr_type_db++ = dpr_mult[j];
 			}
 			
 			pr_cur = exp(logpr_type);
 			*pr_type++ = pr_cur;
-			*pr += pr_cur*w_cur;
-			pr++;
+			#pragma omp atomic
+			pr[k] += pr_cur*w_cur;
+			k++;
 		}
 		
+		free(dpr_mult);
+		free(numer);
+		free(u_first);
 	}
 
 	/*-------------------------------------------------------------------------
@@ -246,10 +249,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	free(w_t);
 	free(pr_first);
 	free(pr_type_first);
-	free(u_first);
 	free(dpr_type_db_first);
-	free(dpr_mult);
-	free(numer);
 	free(dldw);
 	free(dldb);
 
