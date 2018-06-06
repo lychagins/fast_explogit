@@ -1,4 +1,8 @@
 /* This is a MEX interface for the exploded logit likelihood function */
+
+#include <stdint.h>
+typedef uint16_t char16_t;
+
 #include "mex.h"
 #include "explogit.h"
 
