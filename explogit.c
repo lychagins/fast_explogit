@@ -242,7 +242,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	for (j=0; j<num_types*num_covariates; j++) {
 		*grad++ = -dldb[j];
 	}
-
+	
 	free(w_t);
 	free(pr_first);
 	free(pr_type_first);

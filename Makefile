@@ -1,10 +1,9 @@
 CC	= gcc
 
 CFLAGS	= -Wall \
-	  -O3 \
 	  -DWITHGPERFTOOLS -g -L$(HOME)/lib -I$(HOME)/include \
 	  -Wl,-rpath=$(HOME)/lib \
-	  -Wl,--no-as-needed -lprofiler -Wl,--as-needed
+	  -Wl,--no-as-needed -lprofiler -ltcmalloc -Wl,--as-needed 
 
 explogit: explogit.o wrapper_c.o
 	$(CC) $(CFLAGS) explogit.o wrapper_c.o -o wrapper_c -lm
@@ -24,4 +23,5 @@ clean:
 		wrapper_c \
 		explogit_mex.mexa64 \
 		explogit.mexa64 \
-		*.profile
+		*.profile \
+		*.heap
