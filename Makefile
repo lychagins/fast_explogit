@@ -1,9 +1,13 @@
 CC	= gcc
 
-CFLAGS	= -Wall \
-	  -DWITHGPERFTOOLS -g -L$(HOME)/lib -I$(HOME)/include \
-	  -Wl,-rpath=$(HOME)/lib \
-	  -Wl,--no-as-needed -lprofiler -ltcmalloc -Wl,--as-needed 
+# CFLAGS	= -Wall -O3 -fopenmp \
+	  # -L$(HOME)/lib -I$(HOME)/include \
+	  # -Wl,-rpath=$(HOME)/lib
+
+CFLAGS	= -Wall -O3 -fopenmp \
+	-DWITHGPERFTOOLS -g -L$(HOME)/lib -I$(HOME)/include \
+	-Wl,-rpath=$(HOME)/lib \
+	-Wl,--no-as-needed -lprofiler -ltcmalloc -Wl,--as-needed 
 
 explogit: explogit.o wrapper_c.o
 	$(CC) $(CFLAGS) explogit.o wrapper_c.o -o wrapper_c -lm
