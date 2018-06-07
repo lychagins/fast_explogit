@@ -6,7 +6,7 @@
 
 
 double explogit(double *raw_param, int num_types, int num_covariates, int num_students,\
-	double *X, int *nskipped, int *nlisted, double *grad)
+	double *X, int *nskipped, int *nlisted, double *u_first, double *grad)
 {
 
 	/* Pointers for the matrix of covariates: first/last/current elements */
@@ -24,7 +24,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	size_t num_choices;
 
 	/* Pointers for the vector of mean values: first/last/current/pref. list boundary */
-	double *u_first, *u_last, *u, *u_bound;
+	double *u_last, *u, *u_bound;
 
 	/* Probability of observing the preference list; unconditional. First element and
 	 *  a movable pointer. */
@@ -99,8 +99,8 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	dpr_type_db = dpr_type_db_first;
 	
 	#pragma omp parallel for \
-		private(u, u_first, u_bound, u_last, w_cur, xb, beta, denom, logpr_type, numer, dpr_mult, expu, i, j, pr_cur, k) \
-		shared(X_last, X_first, num_choices, num_covariates) \
+		private(u, u_bound, u_last, w_cur, xb, beta, denom, logpr_type, numer, dpr_mult, expu, i, j, pr_cur, k) \
+		shared(X_last, X_first, num_choices, num_covariates, u_first) \
 		firstprivate(nskipped, nlisted, X, pr, beta_type, dpr_type_db)
 	for (i=0; i<num_types; i++) {
 		
@@ -108,30 +108,14 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		beta_type += i*num_covariates;
 		dpr_type_db += i*num_students*num_covariates;
 		
-		u_first = (double *)malloc(num_choices*sizeof(double));
 		numer = (double *)malloc(num_covariates*sizeof(double));
 		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
-		
-		u = u_first;
-		u_last = u_first + num_choices;
-		
+
 		w_cur = w_t[i];
-		
-		/* Dot-product; naive algorithm */
-		while (X<X_last) {
-			
-			xb = 0;
-			beta = beta_type;
-			for (j=0; j<num_covariates; j++) {
-				xb += (*X++)*(*beta++);
-			}			
-			*u++ = xb;
-		}
-		/* Move beta vector pointer to the next type's position */
-		
 
 		/* Reset pointers */
-		u = u_first;
+		u = u_first + i*num_choices;
+		u_last = u + num_choices;
 		X = X_first;
 		u_bound = u;
 
@@ -188,7 +172,6 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		
 		free(dpr_mult);
 		free(numer);
-		free(u_first);
 	}
 
 	/*-------------------------------------------------------------------------
@@ -224,7 +207,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		dldb += num_covariates;
 		
 	}
-	
+
 	
     /*-------------------------------------------------------------------------
 	 * Prepare the results for output
