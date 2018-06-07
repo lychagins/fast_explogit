@@ -14,7 +14,9 @@ u = z*b;
 u(1) = 213;
 
 tic;
-u = z*b;
+u = exp(z*b);
+toc;
+tic;
 [logl, grad] = explogit_mex(beta, 20, x, nskipped, nlisted, u);
 toc;
 

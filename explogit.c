@@ -34,7 +34,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	/* Workspace for computing components of the gradient and the logit shares */
 	double *dpr_type_db, *dpr_type_db_first, *numer, *dpr_mult, \
 		denom, expu, xb, pr_cur, x, p_ratio;
-	
+
 	/* Generic indices */
 	size_t i, j, k;
 
@@ -126,7 +126,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 			
 			/* Initialize accumulators */
 			denom = 0;
-			logpr_type = 0;
+			logpr_type = 1;
 			for (j=0; j<num_covariates; j++) {
 				numer[j] = 0;
 				dpr_mult[j] = 0;
@@ -135,27 +135,24 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 			
 			/* Accumulate logit denominator and gradient's numerator over skipped choices */
 			while (u < u_bound) {
-				expu = exp(*u++);
+				expu = *u++;
 				for (j=0; j<num_covariates; j++) {
 					numer[j] += expu*(*X++);
 				}
 				denom += expu;
 			}
 			
-			
-			
 			/* Go over the preference list in reverse order */
 			u_bound += *nlisted++;
 			while (u < u_bound) {
-				xb = *u++;
-				expu = exp(xb);
+				expu = *u++;
 				denom += expu;
 				for (j=0; j<num_covariates; j++) {
 					x = *X++;
 					numer[j] += expu*x;
 					dpr_mult[j] += x - numer[j]/denom;
 				}
-				logpr_type += xb - log(denom);
+				logpr_type *= expu/denom;
 			}
 			
 			
@@ -163,7 +160,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 				*dpr_type_db++ = dpr_mult[j];
 			}
 			
-			pr_cur = exp(logpr_type);
+			pr_cur = logpr_type;
 			*pr_type++ = pr_cur;
 			#pragma omp atomic
 			pr[k] += pr_cur*w_cur;
