@@ -10,21 +10,21 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 {
 
 	/* Pointers for the matrix of covariates: first/last/current elements */
-	double *X_first, *X_last;
+	double *X_first;
 
 	/* Same parameters in a more convenient shape: shares of types */
 	double *w_t;
 	/* Ditto: pointers to the current/first of the type utility parameters */
-	double *beta, *beta_type;
+	double *beta;
 	
 	/* Return value -- loglikelihood (matrix of one element) */
 	double loglik;
 
 	/* Various dimensions of data */
 	size_t num_choices;
-
+	
 	/* Pointers for the vector of mean values: first/last/current/pref. list boundary */
-	double *u_first, *u_last, *u, *u_bound;
+	double *u;
 
 	/* Probability of observing the preference list; unconditional. First element and
 	 *  a movable pointer. */
@@ -33,10 +33,10 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	
 	/* Workspace for computing components of the gradient and the logit shares */
 	double *dpr_type_db, *dpr_type_db_first, *numer, *dpr_mult, \
-		denom, expu, xb, pr_cur, x, p_ratio;
+		denom, expu, xb, x, p_ratio;
 	
 	/* Generic indices */
-	size_t i, j, k;
+	size_t i, j, k, l, l_last, l_first;
 
 	double *dldw, *dldb, *dldb_first;
 
@@ -69,9 +69,6 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		w_t[i] /= denom;
 	}
 
-	/* Type-specific utility parameters */
-	beta_type = raw_param;
-
 	/*-------------------------------------------------------------------------
 	 * Allocate workspace here
 	 *-----------------------------------------------------------------------*/	
@@ -90,80 +87,72 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	/* This is where we accumulate the gradient w.r.t. to the type-specific utility parameters */
 	dldb_first = (double *)calloc(num_types*num_covariates, sizeof(double));
 	
-	/* Initialize pointers */
-	
-	pr = pr_first;
 	X_first = X;
-	X_last = X_first + num_covariates*num_choices;
-	pr_type = pr_type_first;
-	dpr_type_db = dpr_type_db_first;
 	
 	#pragma omp parallel for \
-		private(u, u_first, u_bound, u_last, w_cur, xb, beta, denom, logpr_type, numer, dpr_mult, expu, i, j, pr_cur, k) \
-		shared(X_last, X_first, num_choices, num_covariates) \
-		firstprivate(nskipped, nlisted, X, pr, beta_type, dpr_type_db)
+		private(u, xb, beta, denom, logpr_type, l, l_first, l_last, \
+			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db) \
+		shared(X_first, pr_type_first, num_choices, num_covariates,\
+			num_types, num_students, nlisted, nskipped, dpr_type_db_first, raw_param) \
+		default(none)
 	for (i=0; i<num_types; i++) {
 		
-		k = 0;
-		beta_type += i*num_covariates;
-		dpr_type_db += i*num_students*num_covariates;
+		/* Initialize pointers for type i */
+		pr_type = pr_type_first + i*num_students;
+		beta = raw_param + i*num_covariates;
+		dpr_type_db = dpr_type_db_first + i*num_students*num_covariates;
 		
-		u_first = (double *)malloc(num_choices*sizeof(double));
+		u = (double *)malloc(num_choices*sizeof(double));
 		numer = (double *)malloc(num_covariates*sizeof(double));
 		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
-		
-		u = u_first;
-		u_last = u_first + num_choices;
-		
-		w_cur = w_t[i];
-		
+				
 		/* Dot-product; naive algorithm */
-		while (X<X_last) {
+		X = X_first;
+		for (l=0; l<num_choices; l++) {
 			
 			xb = 0;
-			beta = beta_type;
 			for (j=0; j<num_covariates; j++) {
-				xb += (*X++)*(*beta++);
+				xb += (*X++)*beta[j];
 			}			
-			*u++ = xb;
-		}
-		/* Move beta vector pointer to the next type's position */
-		
+			u[l] = xb;
+		}	
 
-		/* Reset pointers */
-		u = u_first;
+		/* Reset X pointer */
 		X = X_first;
-		u_bound = u;
+		
+		/* Index for the "short stack" array */
+		l = 0;
 
 		/* Loop over students */
-		while (u<u_last) {
-			
-			u_bound += *nskipped++;
+		for (k=0; k<num_students; k++){
 			
 			/* Initialize accumulators */
-			denom = 0;
-			logpr_type = 0;
+			denom = 0.0;
+			logpr_type = 0.0;
 			for (j=0; j<num_covariates; j++) {
-				numer[j] = 0;
-				dpr_mult[j] = 0;
+				numer[j] = 0.0;
+				dpr_mult[j] = 0.0;
 			}
-			
-			
+
+
 			/* Accumulate logit denominator and gradient's numerator over skipped choices */
-			while (u < u_bound) {
-				expu = exp(*u++);
+
+			l_last = l + nskipped[k];
+			l_first = l;
+			for (l=l_first; l<l_last; l++){
+				expu = exp(u[l]);
 				for (j=0; j<num_covariates; j++) {
 					numer[j] += expu*(*X++);
 				}
 				denom += expu;
 			}
+
+			/* Go over the preference list in reverse order */			
 			
-			
-			
-			/* Go over the preference list in reverse order */
-			u_bound += *nlisted++;
-			while (u < u_bound) {
-				xb = *u++;
+			l_last = l + nlisted[k];
+			l_first = l;
+			for (l=l_first; l<l_last; l++) {
+				xb = u[l];
 				expu = exp(xb);
 				denom += expu;
 				for (j=0; j<num_covariates; j++) {
@@ -179,16 +168,21 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 				*dpr_type_db++ = dpr_mult[j];
 			}
 			
-			pr_cur = exp(logpr_type);
-			*pr_type++ = pr_cur;
-			#pragma omp atomic
-			pr[k] += pr_cur*w_cur;
-			k++;
+			pr_type[k] = exp(logpr_type);
 		}
-		
+				
 		free(dpr_mult);
 		free(numer);
-		free(u_first);
+		free(u);
+	}
+	
+	pr = pr_first;
+	pr_type = pr_type_first;
+	for (i=0; i<num_types; i++) {
+		w_cur = w_t[i];
+		for (k=0; k<num_students; k++) {
+			pr[k] += w_cur*(*pr_type++);
+		}
 	}
 
 	/*-------------------------------------------------------------------------
