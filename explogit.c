@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <omp.h>
+#include <acml.h>
 #include "explogit.h"
 
 
@@ -14,8 +15,6 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 
 	/* Same parameters in a more convenient shape: shares of types */
 	double *w_t;
-	/* Ditto: pointers to the current/first of the type utility parameters */
-	double *beta;
 	
 	/* Return value -- loglikelihood (matrix of one element) */
 	double loglik;
@@ -24,7 +23,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	size_t num_choices;
 	
 	/* Pointers for the vector of mean values: first/last/current/pref. list boundary */
-	double *u;
+	double *u, *u_first;
 
 	/* Probability of observing the preference list; unconditional. First element and
 	 *  a movable pointer. */
@@ -87,35 +86,33 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	/* This is where we accumulate the gradient w.r.t. to the type-specific utility parameters */
 	dldb_first = (double *)calloc(num_types*num_covariates, sizeof(double));
 	
+	u_first = (double *)malloc(num_choices*num_types*sizeof(double));
+	dgemm('T', 'N', \
+		num_choices, num_types, num_covariates, 1, X, num_covariates, \
+		raw_param, num_covariates, 0, u_first, num_choices);
+	//openblas_set_num_threads(40);
+	/* cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, \
+		num_choices, num_types, num_covariates, 1, X, num_covariates, \
+		raw_param, num_covariates, 0, u_first, num_choices); */
+
 	X_first = X;
 	
+	omp_set_num_threads(num_types);
 	#pragma omp parallel for \
-		private(u, xb, beta, denom, logpr_type, l, l_first, l_last, \
+		private(u, xb, denom, logpr_type, l, l_first, l_last, \
 			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db) \
-		shared(X_first, pr_type_first, num_choices, num_covariates,\
+		shared(X_first, pr_type_first, num_choices, num_covariates, u_first,\
 			num_types, num_students, nlisted, nskipped, dpr_type_db_first, raw_param) \
 		default(none)
 	for (i=0; i<num_types; i++) {
 		
 		/* Initialize pointers for type i */
 		pr_type = pr_type_first + i*num_students;
-		beta = raw_param + i*num_covariates;
 		dpr_type_db = dpr_type_db_first + i*num_students*num_covariates;
+		u = u_first + i*num_choices;
 		
-		u = (double *)malloc(num_choices*sizeof(double));
 		numer = (double *)malloc(num_covariates*sizeof(double));
 		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
-				
-		/* Dot-product; naive algorithm */
-		X = X_first;
-		for (l=0; l<num_choices; l++) {
-			
-			xb = 0;
-			for (j=0; j<num_covariates; j++) {
-				xb += (*X++)*beta[j];
-			}			
-			u[l] = xb;
-		}	
 
 		/* Reset X pointer */
 		X = X_first;
@@ -142,8 +139,9 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 			for (l=l_first; l<l_last; l++){
 				expu = exp(u[l]);
 				for (j=0; j<num_covariates; j++) {
-					numer[j] += expu*(*X++);
+					numer[j] += expu*X[j];
 				}
+				X += num_covariates;
 				denom += expu;
 			}
 
@@ -173,9 +171,8 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 				
 		free(dpr_mult);
 		free(numer);
-		free(u);
 	}
-	
+		
 	pr = pr_first;
 	pr_type = pr_type_first;
 	for (i=0; i<num_types; i++) {
@@ -246,6 +243,8 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	free(dpr_type_db_first);
 	free(dldw);
 	free(dldb);
+	
+	free(u_first);
 
 	return loglik;
 

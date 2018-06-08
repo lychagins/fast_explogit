@@ -1,12 +1,14 @@
 CC			= gcc
-CCFLAGS		= -Wall -O3 -fopenmp
+CCFLAGS		= -Wall -O3 -fopenmp -I/opt/acml5.3.1/gfortran64_mp/include -L/opt/acml5.3.1/gfortran64_mp/lib
+
+#-I$(HOME)/include -L$(HOME)/lib
 PROFFLAGS	= $(CCFLAGS) \
-	-DWITHGPERFTOOLS -g -L$(HOME)/lib -I$(HOME)/include \
+	-DWITHGPERFTOOLS -g  \
 	-Wl,-rpath=$(HOME)/lib \
 	-Wl,--no-as-needed -lprofiler -ltcmalloc -Wl,--as-needed 
 
 explogit: explogit.o wrapper_c.o
-	$(CC) $(CCFLAGS) explogit.o wrapper_c.o -o wrapper_c -lm
+	$(CC) $(CCFLAGS) explogit.o wrapper_c.o /opt/acml5.3.1/gfortran64_mp/lib/libacml_mp.a -o wrapper_c -lm -lgfortran
 
 profile:
 	$(CC) $(PROFFLAGS) -c explogit.c

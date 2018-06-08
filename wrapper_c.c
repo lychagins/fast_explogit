@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <omp.h>
 #include "explogit.h"
 
 #ifdef WITHGPERFTOOLS
@@ -20,6 +21,7 @@ int main(){
 	
 	int *nlisted, *nskipped;
 	clock_t t;
+	double tt;
 	double *x, *beta, *grad, sec, logl;
 	FILE *fp;
 
@@ -59,12 +61,11 @@ int main(){
 
 	printf("Finished reading the data. Time spent = %.2lf sec.\n", sec);
 
-	t = clock();
+	tt = omp_get_wtime();
 	logl = explogit(beta, NUM_CLASSES, NUM_COVAR, NUM_STUDENTS, x, nskipped, nlisted, grad);
-	t = clock() - t;
-	sec = ((double)t)/CLOCKS_PER_SEC;
+	tt = omp_get_wtime() - tt;
 
-	printf("Log-likelihood = %lf. Time spent = %.2lf sec.\n", logl, sec);
+	printf("Log-likelihood = %lf. Time spent = %.2lf sec.\n", logl, tt);
 	
 	#ifdef WITHGPERFTOOLS
 	HeapProfilerStop();
