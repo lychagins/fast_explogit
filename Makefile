@@ -1,14 +1,20 @@
-CC	= gcc
-
-CCFLAGS	= -Wall -O3 -fopenmp
-# CCFLAGS	= -Wall -O3 -fopenmp \
-	# -DWITHGPERFTOOLS -g -L$(HOME)/lib -I$(HOME)/include \
-	# -Wl,-rpath=$(HOME)/lib \
-	# -Wl,--no-as-needed -lprofiler -ltcmalloc -Wl,--as-needed 
+CC			= gcc
+CCFLAGS		= -Wall -O3 -fopenmp
+PROFFLAGS	= $(CCFLAGS) \
+	-DWITHGPERFTOOLS -g -L$(HOME)/lib -I$(HOME)/include \
+	-Wl,-rpath=$(HOME)/lib \
+	-Wl,--no-as-needed -lprofiler -ltcmalloc -Wl,--as-needed 
 
 explogit: explogit.o wrapper_c.o
 	$(CC) $(CCFLAGS) explogit.o wrapper_c.o -o wrapper_c -lm
 
+profile:
+	$(CC) $(PROFFLAGS) -c explogit.c
+	$(CC) $(PROFFLAGS) -c wrapper_c.c
+	$(CC) $(PROFFLAGS) explogit.o wrapper_c.o -o wrapper_c -lm
+	./wrapper_c
+	pprof --text --lines ./wrapper_c explogit.profile
+	
 mex: explogit.c explogit_mex.c
 	mex -v CFLAGS="$(CFLAGS) -fopenmp" -lgomp explogit_mex.c explogit.c
 

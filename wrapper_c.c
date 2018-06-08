@@ -1,9 +1,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
-//#include "gperftools/profiler.h"
 #include "explogit.h"
-//#include <gperftools/heap-profiler.h>
+
+#ifdef WITHGPERFTOOLS
+
+#include <gperftools/heap-profiler.h>
+#include <gperftools/profiler.h>
+
+#endif
 
 #define NUM_CLASSES 20
 #define NUM_X 140526176
@@ -18,8 +23,10 @@ int main(){
 	double *x, *beta, *grad, sec, logl;
 	FILE *fp;
 
-	//ProfilerStart("explogit.profile");
-	//HeapProfilerStart("wrapper.hprof");
+	#ifdef WITHGPERFTOOLS
+	ProfilerStart("explogit.profile");
+	HeapProfilerStart("wrapper.hprof");
+	#endif
 	
 	nlisted = (int *)malloc(NUM_STUDENTS*sizeof(int));
 	nskipped = (int *)malloc(NUM_STUDENTS*sizeof(int));
@@ -58,7 +65,11 @@ int main(){
 	sec = ((double)t)/CLOCKS_PER_SEC;
 
 	printf("Log-likelihood = %lf. Time spent = %.2lf sec.\n", logl, sec);
-	//HeapProfilerStop();
-	//ProfilerStop();
+	
+	#ifdef WITHGPERFTOOLS
+	HeapProfilerStop();
+	ProfilerStop();
+	#endif
+	
 	return 0;
 }
