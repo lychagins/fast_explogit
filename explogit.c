@@ -3,8 +3,9 @@
 #include <math.h>
 #include <omp.h>
 #include <cblas.h>
+#include <string.h>
 #include "explogit.h"
-#include "amdlibm.h"
+#include <amdlibm.h>
 
 
 #undef exp
@@ -24,10 +25,10 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	double loglik;
 
 	/* Various dimensions of data */
-	size_t num_choices;
+	size_t num_choices, cssize, csmax;
 	
 	/* Pointers for the vector of mean values: first/last/current/pref. list boundary */
-	double *u, *u_first, *u_cur;
+	double *u, *u_first;
 
 	/* Probability of observing the preference list; unconditional. First element and
 	 *  a movable pointer. */
@@ -39,7 +40,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		denom, expu, xb, x, p_ratio;
 	
 	/* Generic indices */
-	size_t i, j, k, l, l_last, l_first;
+	size_t i, j, k, l, l_last;
 
 	double *dldw, *dldb, *dldb_first;
 
@@ -55,8 +56,13 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	 *-----------------------------------------------------------------------*/
 	
 	num_choices = 0;
+	csmax = 0;
 	for (i=0; i<num_students; i++) {
-		num_choices += nlisted[i] + nskipped[i];
+		cssize = nlisted[i] + nskipped[i];
+		num_choices += cssize;
+		if(csmax < cssize) {
+			csmax = cssize;
+		}
 	}
 	
 	w_t = (double *)malloc(num_types*sizeof(double));
@@ -101,10 +107,10 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		
 	omp_set_num_threads(num_types);
 	#pragma omp parallel for \
-		private(u, u_cur, xb, denom, logpr_type, l, l_first, l_last, \
+		private(u, xb, denom, logpr_type, l, l_last, \
 			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db) \
-		shared(X_first, pr_type_first, num_choices, num_covariates, u_first,\
-			num_types, num_students, nlisted, nskipped, dpr_type_db_first, raw_param) \
+		shared(X_first, pr_type_first, num_choices, num_covariates, u_first, csmax, \
+			num_types, num_students, nlisted, nskipped, dpr_type_db_first) \
 		default(none)
 	for (i=0; i<num_types; i++) {
 		
@@ -112,7 +118,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		pr_type = pr_type_first + i*num_students;
 		dpr_type_db = dpr_type_db_first + i*num_students*num_covariates;
 		u = u_first + i*num_choices;
-		double *v = (double *)malloc(4000*sizeof(double));
+		double *v = (double *)malloc(csmax*sizeof(double));
 		
 		numer = (double *)malloc(num_covariates*sizeof(double));
 		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
@@ -129,26 +135,21 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 			/* Initialize accumulators */
 			denom = 0.0;
 			logpr_type = 0.0;
-			for (j=0; j<num_covariates; j++) {
-				dpr_mult[j] = 0.0;
-			}
-
+			memset(dpr_mult, 0, num_covariates*sizeof(double));
 
 			/* Accumulate logit denominator and gradient's numerator over skipped choices */
-
 			l_last = nskipped[k];
-			u_cur = u;
-			vrda_exp(l_last, u_cur, v);
+			vrda_exp(l_last, u, v);
 			for (l=0; l<l_last; l++){
 				denom += v[l];
 			}
 			u += l_last;
 
 			cblas_dgemv(CblasColMajor, CblasNoTrans, num_covariates, l_last, \
-				0.0, X, num_covariates, v, 1, 0.0, numer, 1);
+				1.0, X, num_covariates, v, 1, 0.0, numer, 1);
 			X += num_covariates*l_last;
-			/* Go over the preference list in reverse order */			
 			
+			/* Go over the preference list in reverse order */
 			l_last = nlisted[k];
 			for (l=0; l<l_last; l++) {
 				xb = *u++;
@@ -162,10 +163,8 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 				logpr_type += xb - log(denom);
 			}
 			
-			
-			for (j=0; j<num_covariates; j++) {
-				*dpr_type_db++ = dpr_mult[j];
-			}
+			memcpy(dpr_type_db, dpr_mult, num_covariates*sizeof(double));
+			dpr_type_db += num_covariates;
 			
 			pr_type[k] = exp(logpr_type);
 		}
@@ -174,15 +173,9 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		free(numer);
 		free(v);
 	}
-		
-	pr = pr_first;
-	pr_type = pr_type_first;
-	for (i=0; i<num_types; i++) {
-		w_cur = w_t[i];
-		for (k=0; k<num_students; k++) {
-			pr[k] += w_cur*(*pr_type++);
-		}
-	}
+	
+	cblas_dgemv(CblasColMajor, CblasNoTrans, num_students, num_types, \
+				1.0, pr_type_first, num_students, w_t, 1, 0.0, pr_first, 1);
 
 	/*-------------------------------------------------------------------------
 	 * Accumulate the gradients
@@ -245,7 +238,6 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	free(dpr_type_db_first);
 	free(dldw);
 	free(dldb);
-	
 	free(u_first);
 
 	return loglik;
