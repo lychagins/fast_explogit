@@ -4,7 +4,11 @@
 #include <omp.h>
 #include <cblas.h>
 #include "explogit.h"
+#include "amdlibm.h"
 
+
+#undef exp
+#define exp amd_exp
 
 double explogit(double *raw_param, int num_types, int num_covariates, int num_students,\
 	double *X, int *nskipped, int *nlisted, double *grad)
@@ -108,6 +112,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		pr_type = pr_type_first + i*num_students;
 		dpr_type_db = dpr_type_db_first + i*num_students*num_covariates;
 		u = u_first + i*num_choices;
+		double *v = (double *)malloc(4000*sizeof(double));
 		
 		numer = (double *)malloc(num_covariates*sizeof(double));
 		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
@@ -133,20 +138,19 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 
 			l_last = nskipped[k];
 			u_cur = u;
+			vrda_exp(l_last, u_cur, v);
 			for (l=0; l<l_last; l++){
-				expu = exp(*u);
-				denom += expu;
-				*u++ = expu;
+				denom += v[l];
 			}
+			u += l_last;
 
 			cblas_dgemv(CblasColMajor, CblasNoTrans, num_covariates, l_last, \
-				0.0, X, num_covariates, u_cur, 1, 0.0, numer, 1);
+				0.0, X, num_covariates, v, 1, 0.0, numer, 1);
 			X += num_covariates*l_last;
 			/* Go over the preference list in reverse order */			
 			
-			l_last = l + nlisted[k];
-			l_first = l;
-			for (l=l_first; l<l_last; l++) {
+			l_last = nlisted[k];
+			for (l=0; l<l_last; l++) {
 				xb = *u++;
 				expu = exp(xb);
 				denom += expu;
@@ -168,6 +172,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 				
 		free(dpr_mult);
 		free(numer);
+		free(v);
 	}
 		
 	pr = pr_first;
