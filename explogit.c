@@ -23,7 +23,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	size_t num_choices;
 	
 	/* Pointers for the vector of mean values: first/last/current/pref. list boundary */
-	double *u, *u_first;
+	double *u, *u_first, *u_cur;
 
 	/* Probability of observing the preference list; unconditional. First element and
 	 *  a movable pointer. */
@@ -87,16 +87,17 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	dldb_first = (double *)calloc(num_types*num_covariates, sizeof(double));
 	
 	u_first = (double *)malloc(num_choices*num_types*sizeof(double));
-	openblas_set_num_threads(40);
+	
+	X_first = X;
+	
+ 	openblas_set_num_threads(omp_get_num_procs());
 	cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, \
 		num_choices, num_types, num_covariates, 1, X, num_covariates, \
 		raw_param, num_covariates, 0, u_first, num_choices);
-
-	X_first = X;
-	
+		
 	omp_set_num_threads(num_types);
 	#pragma omp parallel for \
-		private(u, xb, denom, logpr_type, l, l_first, l_last, \
+		private(u, u_cur, xb, denom, logpr_type, l, l_first, l_last, \
 			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db) \
 		shared(X_first, pr_type_first, num_choices, num_covariates, u_first,\
 			num_types, num_students, nlisted, nskipped, dpr_type_db_first, raw_param) \
@@ -124,30 +125,29 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 			denom = 0.0;
 			logpr_type = 0.0;
 			for (j=0; j<num_covariates; j++) {
-				numer[j] = 0.0;
 				dpr_mult[j] = 0.0;
 			}
 
 
 			/* Accumulate logit denominator and gradient's numerator over skipped choices */
 
-			l_last = l + nskipped[k];
-			l_first = l;
-			for (l=l_first; l<l_last; l++){
-				expu = exp(u[l]);
-				for (j=0; j<num_covariates; j++) {
-					numer[j] += expu*X[j];
-				}
-				X += num_covariates;
+			l_last = nskipped[k];
+			u_cur = u;
+			for (l=0; l<l_last; l++){
+				expu = exp(*u);
 				denom += expu;
+				*u++ = expu;
 			}
 
+			cblas_dgemv(CblasColMajor, CblasNoTrans, num_covariates, l_last, \
+				0.0, X, num_covariates, u_cur, 1, 0.0, numer, 1);
+			X += num_covariates*l_last;
 			/* Go over the preference list in reverse order */			
 			
 			l_last = l + nlisted[k];
 			l_first = l;
 			for (l=l_first; l<l_last; l++) {
-				xb = u[l];
+				xb = *u++;
 				expu = exp(xb);
 				denom += expu;
 				for (j=0; j<num_covariates; j++) {
