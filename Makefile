@@ -4,7 +4,7 @@ CCFLAGS		= -Wall -O3 -fopenmp \
 			-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free \
 			-I$(HOME)/include -L$(HOME)/lib
 			
-LDFLAGS 	= 	$(HOME)/lib/libamdlibm.a \
+CLDFLAGS 	= 	$(HOME)/lib/libamdlibm.a \
 			$(HOME)/lib/libopenblas.a \
 			-Wl,-rpath=$(HOME)/lib \
 			-ltcmalloc
@@ -12,11 +12,11 @@ LDFLAGS 	= 	$(HOME)/lib/libamdlibm.a \
 PCCFLAGS	= $(CCFLAGS) \
 			-DWITHGPERFTOOLS -g
 
-PLDFLAGS	= $(LDFLAGS) \
+PLDFLAGS	= $(CLDFLAGS) \
 			-lprofiler
 
 explogit: explogit.o wrapper_c.o
-	$(CC) $(CCFLAGS) explogit.o wrapper_c.o	-o wrapper_c $(LDFLAGS)
+	$(CC) $(CCFLAGS) explogit.o wrapper_c.o	-o wrapper_c $(CLDFLAGS)
 
 profile:
 	$(CC) $(PCCFLAGS) -c explogit.c
@@ -26,8 +26,11 @@ profile:
 	pprof --text --lines ./wrapper_c explogit.profile
 	
 mex: explogit.c explogit_mex.c
-	mex -v CFLAGS="$(CFLAGS) -fopenmp" -lgomp explogit_mex.c explogit.c
-
+	mex CFLAGS='$$CFLAGS -fopenmp -I$(HOME)/include' \
+		CLIBS='-L$(HOME)/lib -Wl,-rpath=$(HOME)/lib -lgomp -lamdlibm -lopenblas $$CLIBS' -v \
+		COPTIMFLAGS='-O3 -DNDEBUG' LDOPTIMFLAGS='-O3' \
+		explogit_mex.c explogit.c
+	
 wrapper_c.o: wrapper_c.c
 	$(CC) $(CCFLAGS) -c wrapper_c.c
 
