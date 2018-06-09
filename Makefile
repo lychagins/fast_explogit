@@ -1,3 +1,6 @@
+RED			='\033[1;31m'
+NC			='\033[0m' # No Color
+
 CC			= gcc
 
 CCFLAGS		= -Wall -O3 -fopenmp \
@@ -26,10 +29,11 @@ profile:
 	pprof --text --lines ./wrapper_c explogit.profile
 	
 mex: explogit.c explogit_mex.c
-	mex CFLAGS='$$CFLAGS -fopenmp -I$(HOME)/include' \
-		CLIBS='-L$(HOME)/lib -Wl,-rpath=$(HOME)/lib -lgomp -lamdlibm -lopenblas $$CLIBS' -v \
+	mex CFLAGS='$$CFLAGS -fopenmp -I$(HOME)/include -std=c99' \
+		CLIBS='-L$(HOME)/lib -Wl,-rpath=$(HOME)/lib -lgomp -lamdlibm -lopenblas -ltcmalloc $$CLIBS' -v \
 		COPTIMFLAGS='-O3 -DNDEBUG' LDOPTIMFLAGS='-O3' \
 		explogit_mex.c explogit.c
+	echo -e ${RED}Before running Matlab, set LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6${NC}
 	
 wrapper_c.o: wrapper_c.c
 	$(CC) $(CCFLAGS) -c wrapper_c.c

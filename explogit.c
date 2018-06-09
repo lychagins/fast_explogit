@@ -4,6 +4,7 @@
 #include <omp.h>
 #include <cblas.h>
 #include <string.h>
+#include <gperftools/tcmalloc.h>
 #include "explogit.h"
 #include <amdlibm.h>
 
@@ -65,7 +66,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		}
 	}
 	
-	w_t = (double *)malloc(num_types*sizeof(double));
+	w_t = (double *)tc_malloc(num_types*sizeof(double));
 	w_t[0] = 1;
 	denom = 1;
 	for (i=1; i<num_types; i++) {
@@ -83,20 +84,20 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	 *-----------------------------------------------------------------------*/	
 	/* To compute the gradient of loglikelihood, we need to know unconditional 
 	 * probabilities. Therefore, we have to store some of the gradient's components */
-	pr_first = (double *)calloc(num_students, sizeof(double));
-	pr_type_first = (double *)malloc(num_students*num_types*sizeof(double));
+	pr_first = (double *)tc_calloc(num_students, sizeof(double));
+	pr_type_first = (double *)tc_malloc(num_students*num_types*sizeof(double));
 	
 	/* Derivatives of the conditional choice probability, by student and type */
-	dpr_type_db_first = (double *)calloc(num_students*num_types*num_covariates,\
+	dpr_type_db_first = (double *)tc_calloc(num_students*num_types*num_covariates,\
 		sizeof(double));
 	
 	/* This is where we accumulate the gradient w.r.t. the type weight parameters */
-	dldw = (double *)calloc(num_types, sizeof(double));
+	dldw = (double *)tc_calloc(num_types, sizeof(double));
 
 	/* This is where we accumulate the gradient w.r.t. to the type-specific utility parameters */
-	dldb_first = (double *)calloc(num_types*num_covariates, sizeof(double));
+	dldb_first = (double *)tc_calloc(num_types*num_covariates, sizeof(double));
 	
-	u_first = (double *)malloc(num_choices*num_types*sizeof(double));
+	u_first = (double *)tc_malloc(num_choices*num_types*sizeof(double));
 	
 	X_first = X;
 	
@@ -118,10 +119,10 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		pr_type = pr_type_first + i*num_students;
 		dpr_type_db = dpr_type_db_first + i*num_students*num_covariates;
 		u = u_first + i*num_choices;
-		double *v = (double *)malloc(csmax*sizeof(double));
+		double *v = (double *)tc_malloc(csmax*sizeof(double));
 		
-		numer = (double *)malloc(num_covariates*sizeof(double));
-		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
+		numer = (double *)tc_malloc(num_covariates*sizeof(double));
+		dpr_mult = (double *)tc_malloc(num_covariates*sizeof(double));
 
 		/* Reset X pointer */
 		X = X_first;
@@ -169,9 +170,9 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 			pr_type[k] = exp(logpr_type);
 		}
 				
-		free(dpr_mult);
-		free(numer);
-		free(v);
+		tc_free(dpr_mult);
+		tc_free(numer);
+		tc_free(v);
 	}
 	
 	cblas_dgemv(CblasColMajor, CblasNoTrans, num_students, num_types, \
@@ -232,13 +233,13 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 		*grad++ = -dldb[j];
 	}
 	
-	free(w_t);
-	free(pr_first);
-	free(pr_type_first);
-	free(dpr_type_db_first);
-	free(dldw);
-	free(dldb);
-	free(u_first);
+	tc_free(w_t);
+	tc_free(pr_first);
+	tc_free(pr_type_first);
+	tc_free(dpr_type_db_first);
+	tc_free(dldw);
+	tc_free(dldb);
+	tc_free(u_first);
 
 	return loglik;
 
