@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <omp.h>
-#include <acml.h>
+#include <cblas.h>
 #include "explogit.h"
 
 
@@ -87,13 +87,10 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	dldb_first = (double *)calloc(num_types*num_covariates, sizeof(double));
 	
 	u_first = (double *)malloc(num_choices*num_types*sizeof(double));
-	dgemm('T', 'N', \
+	openblas_set_num_threads(40);
+	cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, \
 		num_choices, num_types, num_covariates, 1, X, num_covariates, \
 		raw_param, num_covariates, 0, u_first, num_choices);
-	//openblas_set_num_threads(40);
-	/* cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, \
-		num_choices, num_types, num_covariates, 1, X, num_covariates, \
-		raw_param, num_covariates, 0, u_first, num_choices); */
 
 	X_first = X;
 	
