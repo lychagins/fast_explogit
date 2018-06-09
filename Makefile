@@ -18,9 +18,15 @@ PCCFLAGS	= $(CCFLAGS) \
 PLDFLAGS	= $(CLDFLAGS) \
 			-lprofiler
 
-explogit: explogit.o wrapper_c.o
-	$(CC) $(CCFLAGS) explogit.o wrapper_c.o	-o wrapper_c $(CLDFLAGS)
 
+explogit: explogit.o wrapper_c.o
+	$(CC) $(CCFLAGS) explogit.o wrapper_c.o -o wrapper_c $(CLDFLAGS)
+
+optim: explogit.c wrapper_c.c
+	$(CC) $(CCFLAGS) explogit.c wrapper_c.c	-fprofile-generate -o wrapper_c $(CLDFLAGS)
+	./wrapper_c
+	$(CC) $(CCFLAGS) explogit.c wrapper_c.c	-fprofile-use -o wrapper_c $(CLDFLAGS)
+	
 profile:
 	$(CC) $(PCCFLAGS) -c explogit.c
 	$(CC) $(PCCFLAGS) -c wrapper_c.c
@@ -48,4 +54,5 @@ clean:
 		explogit_mex.mexa64 \
 		explogit.mexa64 \
 		*.profile \
-		*.heap
+		*.heap \
+		*.gcda
