@@ -137,6 +137,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 			denom = 0.0;
 			logpr_type = 0.0;
 			memset(dpr_mult, 0, num_covariates*sizeof(double));
+			memset(numer, 0, num_covariates*sizeof(double));
 
 			/* Accumulate logit denominator and gradient's numerator over skipped choices */
 			l_last = nskipped[k];
