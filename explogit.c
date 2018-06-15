@@ -13,7 +13,7 @@
 #define exp amd_exp
 
 double explogit(double *raw_param, int num_types, int num_covariates, int num_students,\
-	double *X, int *nskipped, int *nlisted, double *grad)
+	int dim_beta_common, double *X, int *nskipped, int *nlisted, double *grad)
 {
 
 	/* Pointers for the matrix of covariates: first/last/current elements */
@@ -26,10 +26,10 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	double loglik;
 
 	/* Various dimensions of data */
-	size_t num_choices, cssize, csmax;
+	size_t num_choices, cssize, csmax, num_covar_ts;
 	
 	/* Pointers for the vector of mean values: first/last/current/pref. list boundary */
-	double *u, *u_first;
+	double *u, *u_first, *u_common;
 
 	/* Probability of observing the preference list; unconditional. First element and
 	 *  a movable pointer. */
@@ -101,12 +101,29 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	
 	X_first = X;
 	
- 	openblas_set_num_threads(omp_get_num_procs());
-	cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, \
-		num_choices, num_types, num_covariates, 1, X, num_covariates, \
-		raw_param, num_covariates, 0, u_first, num_choices);
-		
+	openblas_set_num_threads(omp_get_num_procs());
 	omp_set_num_threads(num_types);
+	/* Common term, same for all types */
+	cblas_dgemv(CblasColMajor, CblasTrans, num_covariates, num_choices, 1.0, \
+		X, num_covariates, raw_param, 1, 0.0, u_first, 1);
+	/* TODO: Memcpy VERY slow */
+	#pragma omp parallel for \
+		private(i) shared(u_first, u_common, num_types, num_choices) default(none)
+	for (i=1; i<num_types; i++){
+		memcpy(u_first + i*num_choices, u_first, sizeof(double)*num_choices);
+	}
+	
+	/* We don't need common parameters anymore, moving on */
+	raw_param += num_covariates;
+	/* Number of covariates with type-specific coefficients */
+	num_covar_ts = num_covariates - dim_beta_common;
+	
+	/* Type-specific terms. If type-specific coefficients are sparse, we may optimize this further */
+	cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, \
+		num_choices, num_types, num_covar_ts, 1, X + num_choices*dim_beta_common,\
+		num_covar_ts, raw_param, num_covar_ts, 1.0, u_first, num_choices);
+		
+	
 	#pragma omp parallel for \
 		private(u, xb, denom, logpr_type, l, l_last, \
 			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db) \
@@ -225,13 +242,31 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	}
 	
 	/* Save the gradient */
-	
+	/* Type share parameters */
 	for (i=1; i<num_types; i++) {
 		*grad++ = -dldw[i];
 	}
+	
+	
+	/* Parameters common to all types */
 	dldb = dldb_first;
-	for (j=0; j<num_types*num_covariates; j++) {
-		*grad++ = -dldb[j];
+	memset(grad, 0, num_covariates*sizeof(double));
+	for (i=0; i<num_types; i++){
+		
+		for (j=0; j<num_covariates; j++){
+			grad[j] -= dldb[i*num_covariates + j];
+		}
+		
+	}
+	
+	/* Type-specific parameters */
+	grad += num_covariates;
+	for (i=0; i<num_types; i++){
+		
+		for (j=dim_beta_common; j<num_covariates; j++){
+			grad[i*num_covar_ts + j] = -dldb[i*num_covariates + j];
+		}
+		
 	}
 	
 	tc_free(w_t);

@@ -15,7 +15,9 @@
 #define NUM_X 140526176
 #define NUM_COVAR 14
 #define NUM_STUDENTS 7875
-#define NUM_BETA 299
+//#define NUM_BETA 299
+#define NUM_BETA 313
+#define DIM_BETA_COMMON 0
 
 int main(){
 	
@@ -62,7 +64,7 @@ int main(){
 	printf("Finished reading the data. Time spent = %.2lf sec.\n", sec);
 
 	tt = omp_get_wtime();
-	logl = explogit(beta, NUM_CLASSES, NUM_COVAR, NUM_STUDENTS, x, nskipped, nlisted, grad);
+	logl = explogit(beta, NUM_CLASSES, NUM_COVAR, NUM_STUDENTS, DIM_BETA_COMMON, x, nskipped, nlisted, grad);
 	tt = omp_get_wtime() - tt;
 
 	printf("Log-likelihood = %lf. Time spent = %.2lf sec.\n", logl, tt);
