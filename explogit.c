@@ -38,7 +38,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	
 	/* Workspace for computing components of the gradient and the logit shares */
 	double *dpr_type_db, *dpr_type_db_first, *numer, *dpr_mult, \
-		denom, expu, xb, x, p_ratio;
+		denom, expu, xb, x, p_ratio, max_u;
 	
 	/* Generic indices */
 	size_t i, j, k, l, l_last;
@@ -109,7 +109,7 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 	omp_set_num_threads(num_types);
 	#pragma omp parallel for \
 		private(u, xb, denom, logpr_type, l, l_last, \
-			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db) \
+			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db, max_u) \
 		shared(X_first, pr_type_first, num_choices, num_covariates, u_first, csmax, \
 			num_types, num_students, nlisted, nskipped, dpr_type_db_first) \
 		default(none)
@@ -138,6 +138,18 @@ double explogit(double *raw_param, int num_types, int num_covariates, int num_st
 			logpr_type = 0.0;
 			memset(dpr_mult, 0, num_covariates*sizeof(double));
 			memset(numer, 0, num_covariates*sizeof(double));
+			
+			/* Normalize max to 1 */
+			l_last = nskipped[k] + nlisted[k];
+			max_u = u[0];
+			for (l=0; l<l_last; l++) {
+				if (max_u < u[l]){
+					max_u = u[l];
+				};
+			}
+			for (l=0; l<l_last; l++) {
+				u[l] -= max_u;
+			}
 
 			/* Accumulate logit denominator and gradient's numerator over skipped choices */
 			l_last = nskipped[k];
