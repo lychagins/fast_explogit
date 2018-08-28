@@ -34,7 +34,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	size_t num_choices, cssize, csmax;
 	
 	/* Pointers for the vector of mean values, their exponentials */
-	double *u, *v;
+	double *u, *u_first, *v;
 
 	/* Workspace for computing components of the gradient and the logit shares */
 	double *numer, denom, expu, xb, x;
@@ -61,10 +61,11 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	 *-----------------------------------------------------------------------*/	
 	/* To compute the gradient of loglikelihood, we need to know unconditional 
 	 * probabilities. Therefore, we have to store some of the gradient's components */
-	u = (double *)malloc(num_choices*sizeof(double));
+	u_first = (double *)malloc(num_choices*sizeof(double));
 	v = (double *)malloc(csmax*sizeof(double));
 	numer = (double *)calloc(num_covariates, sizeof(double));
 	
+	u = u_first;
 	dgemv(X, num_choices, beta, num_covariates, u);
 	
 	loglik = 0.0;
@@ -107,8 +108,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	}
 	free(numer);
 	free(v);
-	u -= num_choices;
-	free(u);
+	free(u_first);
 
 	return loglik;
 
