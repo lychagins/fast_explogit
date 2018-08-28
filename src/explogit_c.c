@@ -107,6 +107,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	}
 	free(numer);
 	free(v);
+	u -= num_choices;
 	free(u);
 
 	return loglik;
