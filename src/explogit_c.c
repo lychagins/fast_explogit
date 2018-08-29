@@ -21,6 +21,21 @@ void dgemv(double *X, size_t nX, double *b, size_t nb, double *Xb)
 	}
 }
 
+void dgemv_t(double *X, size_t nX, double *b, size_t nb, double *Xb)
+{
+	size_t i, j;
+	double u;
+	
+	for (j=0; j<nb; j++) {
+		
+		u = b[j];
+		for (i=0; i<nX; i++){
+			Xb[i] += u*(*X++);
+		}
+		
+	}
+}
+
 double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	double *X, uint16_t *nskipped, uint16_t *nlisted, double *grad)
 {
@@ -63,7 +78,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	 * probabilities. Therefore, we have to store some of the gradient's components */
 	u_first = (double *)malloc(num_choices*sizeof(double));
 	v = (double *)malloc(csmax*sizeof(double));
-	numer = (double *)calloc(num_covariates, sizeof(double));
+	numer = (double *)malloc(num_covariates*sizeof(double));
 	
 	u = u_first;
 	dgemv(X, num_choices, beta, num_covariates, u);
@@ -79,6 +94,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 		
 		/* Initialize accumulators */
 		denom = 0.0;
+		memset(numer, 0, num_covariates*sizeof(double));
 
 		/* Accumulate logit denominator and gradient's numerator over skipped choices */
 		l_last = nskipped[i];
@@ -88,7 +104,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 		}
 		u += l_last;
 		
-		dgemv(X, num_covariates, v, l_last, numer);
+		dgemv_t(X, num_covariates, v, l_last, numer);
 		X += num_covariates*l_last;
 		
 		/* Go over the preference list in reverse order */
