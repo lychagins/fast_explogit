@@ -37,13 +37,13 @@ void dgemv_t(double *X, size_t nX, double *b, size_t nb, double *Xb)
 }
 
 double explogit(double *beta, size_t num_covariates, size_t num_students,\
-	double *X, uint16_t *nskipped, uint16_t *nlisted, double *grad)
+	double *X, uint16_t *nskipped, uint16_t *nlisted, double *weight, double *grad)
 {
 	/* Pointer to the head of X */
 	double *X_first;
 	
 	/* Return value -- loglikelihood (matrix of one element) */
-	double loglik;
+	double loglik, loglik_i;
 
 	/* Various dimensions of data */
 	size_t num_choices, cssize, csmax;
@@ -52,7 +52,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	double *u, *u_first, *v;
 
 	/* Workspace for computing components of the gradient and the logit shares */
-	double *numer, denom, expu, xb, x;
+	double *numer, denom, expu, xb, x, *grad_i;
 	
 	/* Generic indices */
 	size_t i, j, l, l_last;
@@ -79,6 +79,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	u_first = (double *)malloc(num_choices*sizeof(double));
 	v = (double *)malloc(csmax*sizeof(double));
 	numer = (double *)malloc(num_covariates*sizeof(double));
+	grad_i = (double *)malloc(num_covariates*sizeof(double));
 	
 	u = u_first;
 	dgemv(X, num_choices, beta, num_covariates, u);
@@ -109,6 +110,8 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 		
 		/* Go over the preference list in reverse order */
 		l_last = nlisted[i];
+		loglik_i = 0.0;
+		memset(grad_i, 0, num_covariates*sizeof(double));
 		for (l=0; l<l_last; l++) {
 			xb = *u++;
 			expu = exp(xb);
@@ -116,15 +119,20 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 			for (j=0; j<num_covariates; j++) {
 				x = *X++;
 				numer[j] += expu*x;
-				grad[j] += x - numer[j]/denom;
+				grad_i[j] += x - numer[j]/denom;
 			}
-			loglik += xb - log(denom);
+			loglik_i += xb - log(denom);
 		}
 		
+		loglik += weight[i]*loglik_i;
+		for (j=0; j<num_covariates; j++) {
+			grad[j] += weight[i]*grad_i[j];
+		}
 	}
 	free(numer);
 	free(v);
 	free(u_first);
+	free(grad_i);
 
 	return loglik;
 
