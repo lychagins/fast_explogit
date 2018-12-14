@@ -4,7 +4,7 @@
 typedef uint16_t char16_t;
 
 #include "mex.h"
-#include "explogit.h"
+#include "lcexplogit.h"
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
@@ -39,7 +39,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		+ num_types - 1, 1, mxREAL);
 	grad = mxGetPr(plhs[1]);
 	
-	*loglik = explogit(beta, num_types, num_covariates, num_students, x, \
+	*loglik = lcexplogit(beta, num_types, num_covariates, num_students, x, \
 		nskipped, nlisted, grad);
 	return;
 	
