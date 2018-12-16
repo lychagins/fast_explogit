@@ -36,7 +36,7 @@ void dgemv_t(double *X, size_t nX, double *b, size_t nb, double *Xb)
 	}
 }
 
-double explogit(double *beta, size_t num_covariates, size_t num_students,\
+double explogit(double *beta, size_t num_covariates, size_t num_agents,\
 	double *X, uint16_t *nskipped, uint16_t *nlisted, double *weight, double *grad)
 {
 	/* Pointer to the head of X */
@@ -63,7 +63,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	
 	num_choices = 0;
 	csmax = 0;
-	for (i=0; i<num_students; i++) {
+	for (i=0; i<num_agents; i++) {
 		cssize = nlisted[i] + nskipped[i];
 		num_choices += cssize;
 		if(csmax < cssize) {
@@ -91,7 +91,7 @@ double explogit(double *beta, size_t num_covariates, size_t num_students,\
 	l = 0;
 
 	/* Loop over students */
-	for (i=0; i<num_students; i++){
+	for (i=0; i<num_agents; i++){
 		
 		/* Initialize accumulators */
 		denom = 0.0;

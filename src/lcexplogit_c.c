@@ -5,6 +5,7 @@
 #include <cblas.h>
 #include <string.h>
 #include <gperftools/tcmalloc.h>
+#include <stdint.h>
 #include "lcexplogit.h"
 #include <amdlibm.h>
 
@@ -12,8 +13,8 @@
 #undef exp
 #define exp amd_exp
 
-double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_students,\
-	double *X, int *nskipped, int *nlisted, double *grad)
+double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_agents,\
+	double *X, uint16_t *nskipped, uint16_t *nlisted, double *grad)
 {
 
 	/* Pointers for the matrix of covariates: first/last/current elements */
@@ -58,7 +59,7 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 	
 	num_choices = 0;
 	csmax = 0;
-	for (i=0; i<num_students; i++) {
+	for (i=0; i<num_agents; i++) {
 		cssize = nlisted[i] + nskipped[i];
 		num_choices += cssize;
 		if(csmax < cssize) {
@@ -78,17 +79,17 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 	for (i=0; i<num_types; i++) {
 		w_t[i] /= denom;
 	}
-
+	
 	/*-------------------------------------------------------------------------
 	 * Allocate workspace here
 	 *-----------------------------------------------------------------------*/	
 	/* To compute the gradient of loglikelihood, we need to know unconditional 
 	 * probabilities. Therefore, we have to store some of the gradient's components */
-	pr_first = (double *)tc_calloc(num_students, sizeof(double));
-	pr_type_first = (double *)tc_malloc(num_students*num_types*sizeof(double));
+	pr_first = (double *)tc_calloc(num_agents, sizeof(double));
+	pr_type_first = (double *)tc_malloc(num_agents*num_types*sizeof(double));
 	
 	/* Derivatives of the conditional choice probability, by student and type */
-	dpr_type_db_first = (double *)tc_calloc(num_students*num_types*num_covariates,\
+	dpr_type_db_first = (double *)tc_calloc(num_agents*num_types*num_covariates,\
 		sizeof(double));
 	
 	/* This is where we accumulate the gradient w.r.t. the type weight parameters */
@@ -100,24 +101,21 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 	u_first = (double *)tc_malloc(num_choices*num_types*sizeof(double));
 	
 	X_first = X;
-	
  	openblas_set_num_threads(omp_get_num_procs());
 	cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, \
 		num_choices, num_types, num_covariates, 1, X, num_covariates, \
 		raw_param, num_covariates, 0, u_first, num_choices);
-		
 	omp_set_num_threads(num_types);
 	#pragma omp parallel for \
 		private(u, xb, denom, logpr_type, l, l_last, \
 			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db, max_u) \
 		shared(X_first, pr_type_first, num_choices, num_covariates, u_first, csmax, \
-			num_types, num_students, nlisted, nskipped, dpr_type_db_first) \
+			num_types, num_agents, nlisted, nskipped, dpr_type_db_first) \
 		default(none)
 	for (i=0; i<num_types; i++) {
-		
 		/* Initialize pointers for type i */
-		pr_type = pr_type_first + i*num_students;
-		dpr_type_db = dpr_type_db_first + i*num_students*num_covariates;
+		pr_type = pr_type_first + i*num_agents;
+		dpr_type_db = dpr_type_db_first + i*num_agents*num_covariates;
 		u = u_first + i*num_choices;
 		double *v = (double *)tc_malloc(csmax*sizeof(double));
 		
@@ -131,7 +129,7 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 		l = 0;
 
 		/* Loop over students */
-		for (k=0; k<num_students; k++){
+		for (k=0; k<num_agents; k++){
 			
 			/* Initialize accumulators */
 			denom = 0.0;
@@ -188,11 +186,11 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 		tc_free(v);
 	}
 	
-	cblas_dgemv(CblasColMajor, CblasNoTrans, num_students, num_types, \
-				1.0, pr_type_first, num_students, w_t, 1, 0.0, pr_first, 1);
+	cblas_dgemv(CblasColMajor, CblasNoTrans, num_agents, num_types, \
+				1.0, pr_type_first, num_agents, w_t, 1, 0.0, pr_first, 1);
 
 	/*-------------------------------------------------------------------------
-	 * Accumulate the gradients
+	 * Accumulate gradients
 	 *-----------------------------------------------------------------------*/
 	/* Reset the pointers */
 	pr_type = pr_type_first;
@@ -204,7 +202,7 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 		pr = pr_first;
 		w_cur = w_t[i];
 		
-		for (k=0; k<num_students; k++) {
+		for (k=0; k<num_agents; k++) {
 			
 			/* Compute conditional-to-marginal probability ratio. This is a
 			 * common multiplier in all gradient terms */
@@ -229,21 +227,21 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
     /*-------------------------------------------------------------------------
 	 * Prepare the results for output
 	 *-----------------------------------------------------------------------*/
-	/* Save the negative loglikelihood */
+	/* Save the loglikelihood */
 	pr = pr_first;
 	loglik = 0;
-	for (i=0; i<num_students; i++) {
-		loglik -= log(pr[i]);
+	for (i=0; i<num_agents; i++) {
+		loglik += log(pr[i]);
 	}
 	
 	/* Save the gradient */
 	
 	for (i=1; i<num_types; i++) {
-		*grad++ = -dldw[i];
+		*grad++ = dldw[i];
 	}
 	dldb = dldb_first;
 	for (j=0; j<num_types*num_covariates; j++) {
-		*grad++ = -dldb[j];
+		*grad++ = dldb[j];
 	}
 	
 	tc_free(w_t);

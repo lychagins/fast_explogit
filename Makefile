@@ -43,9 +43,7 @@ build/lcexplogit_c.o: src/lcexplogit_c.c
 	$(CC) $(CCFLAGS) -c src/lcexplogit_c.c -o build/lcexplogit_c.o
 
 clean:
-	rm -f 	build/lcexplogit.o \
-		explogit_mex.mexa64 \
-		build/explogit.mexa64 \
+	rm -f 	build/* \
 		*.profile \
 		*.heap \
 		*.gcda
