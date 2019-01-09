@@ -1,17 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include <omp.h>
+//#include <omp.h>
 #include <cblas.h>
 #include <string.h>
-#include <gperftools/tcmalloc.h>
 #include <stdint.h>
 #include "lcexplogit.h"
-#include <amdlibm.h>
-
-
-#undef exp
-#define exp amd_exp
 
 double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_agents,\
 	double *X, uint16_t *nskipped, uint16_t *nlisted, double *grad)
@@ -67,7 +61,7 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 		}
 	}
 	
-	w_t = (double *)tc_malloc(num_types*sizeof(double));
+	w_t = (double *)malloc(num_types*sizeof(double));
 	w_t[0] = 1;
 	denom = 1;
 	for (i=1; i<num_types; i++) {
@@ -85,27 +79,27 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 	 *-----------------------------------------------------------------------*/	
 	/* To compute the gradient of loglikelihood, we need to know unconditional 
 	 * probabilities. Therefore, we have to store some of the gradient's components */
-	pr_first = (double *)tc_calloc(num_agents, sizeof(double));
-	pr_type_first = (double *)tc_malloc(num_agents*num_types*sizeof(double));
+	pr_first = (double *)calloc(num_agents, sizeof(double));
+	pr_type_first = (double *)malloc(num_agents*num_types*sizeof(double));
 	
 	/* Derivatives of the conditional choice probability, by student and type */
-	dpr_type_db_first = (double *)tc_calloc(num_agents*num_types*num_covariates,\
+	dpr_type_db_first = (double *)calloc(num_agents*num_types*num_covariates,\
 		sizeof(double));
 	
 	/* This is where we accumulate the gradient w.r.t. the type weight parameters */
-	dldw = (double *)tc_calloc(num_types, sizeof(double));
+	dldw = (double *)calloc(num_types, sizeof(double));
 
 	/* This is where we accumulate the gradient w.r.t. to the type-specific utility parameters */
-	dldb_first = (double *)tc_calloc(num_types*num_covariates, sizeof(double));
+	dldb_first = (double *)calloc(num_types*num_covariates, sizeof(double));
 	
-	u_first = (double *)tc_malloc(num_choices*num_types*sizeof(double));
+	u_first = (double *)malloc(num_choices*num_types*sizeof(double));
 	
 	X_first = X;
- 	openblas_set_num_threads(omp_get_num_procs());
+ 	/* openblas_set_num_threads(omp_get_num_procs()); */
 	cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, \
 		num_choices, num_types, num_covariates, 1, X, num_covariates, \
 		raw_param, num_covariates, 0, u_first, num_choices);
-	omp_set_num_threads(num_types);
+	/* omp_set_num_threads(num_types); */
 	#pragma omp parallel for \
 		private(u, xb, denom, logpr_type, l, l_last, \
 			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db, max_u) \
@@ -117,10 +111,10 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 		pr_type = pr_type_first + i*num_agents;
 		dpr_type_db = dpr_type_db_first + i*num_agents*num_covariates;
 		u = u_first + i*num_choices;
-		double *v = (double *)tc_malloc(csmax*sizeof(double));
+		double *v = (double *)malloc(csmax*sizeof(double));
 		
-		numer = (double *)tc_malloc(num_covariates*sizeof(double));
-		dpr_mult = (double *)tc_malloc(num_covariates*sizeof(double));
+		numer = (double *)malloc(num_covariates*sizeof(double));
+		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
 
 		/* Reset X pointer */
 		X = X_first;
@@ -151,8 +145,8 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 
 			/* Accumulate logit denominator and gradient's numerator over skipped choices */
 			l_last = nskipped[k];
-			vrda_exp(l_last, u, v);
 			for (l=0; l<l_last; l++){
+				v[l] = exp(u[l]);
 				denom += v[l];
 			}
 			u += l_last;
@@ -181,9 +175,9 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 			pr_type[k] = exp(logpr_type);
 		}
 				
-		tc_free(dpr_mult);
-		tc_free(numer);
-		tc_free(v);
+		free(dpr_mult);
+		free(numer);
+		free(v);
 	}
 	
 	cblas_dgemv(CblasColMajor, CblasNoTrans, num_agents, num_types, \
@@ -244,13 +238,13 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 		*grad++ = dldb[j];
 	}
 	
-	tc_free(w_t);
-	tc_free(pr_first);
-	tc_free(pr_type_first);
-	tc_free(dpr_type_db_first);
-	tc_free(dldw);
-	tc_free(dldb);
-	tc_free(u_first);
+	free(w_t);
+	free(pr_first);
+	free(pr_type_first);
+	free(dpr_type_db_first);
+	free(dldw);
+	free(dldb);
+	free(u_first);
 
 	return loglik;
 

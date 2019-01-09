@@ -15,7 +15,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	*/
 
 	double *beta, *x, *loglik, *grad, *weight;
-	size_t num_covariates, num_students, i;
+	size_t num_covariates, num_agents, i;
 	uint16_t *nskipped, *nlisted;
 	
 	beta = mxGetPr(prhs[0]);
@@ -24,13 +24,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	num_covariates = mxGetM(prhs[1]);
 	nskipped = (uint16_t *)mxGetData(prhs[2]);
 	nlisted = (uint16_t *)mxGetData(prhs[3]);
-	num_students = mxGetM(prhs[2]);
+	num_agents = mxGetM(prhs[2]);
 	
 	if(nrhs == 5) {
 		weight = mxGetPr(prhs[4]);
 	} else {
-		weight = (double *)malloc(num_students*sizeof(double));
-		for(i=0; i<num_students; i++){
+		weight = (double *)malloc(num_agents*sizeof(double));
+		for(i=0; i<num_agents; i++){
 			weight[i] = 1.0;
 		}
 	}
@@ -43,7 +43,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	plhs[1] = mxCreateDoubleMatrix(num_covariates, 1, mxREAL);
 	grad = mxGetPr(plhs[1]);
 	
-	*loglik = explogit(beta, num_covariates, num_students, x, nskipped, nlisted, weight, grad);
+	*loglik = explogit(beta, num_covariates, num_agents, x, nskipped, nlisted, weight, grad);
 	
 	/* Clean up */
 	if(nrhs < 5 && weight!=NULL){

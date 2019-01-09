@@ -3,13 +3,13 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
+#include "mex.h"
 #include "explogit.h"
 
 void dgemv(double *X, size_t nX, double *b, size_t nb, double *Xb)
 {
 	size_t i, j;
 	double u;
-	
 	for (i=0; i<nX; i++) {
 		
 		u = 0.0;

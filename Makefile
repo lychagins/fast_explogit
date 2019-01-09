@@ -30,15 +30,22 @@ PLDFLAGS	= $(CLDFLAGS) \
 	# ./wrapper_c
 	# pprof --text --lines ./wrapper_c explogit.profile
 	
-mex: build/lcexplogit_c.o src/lcexplogit.c
-	cd src && \
-	mex CFLAGS='$$CFLAGS -fopenmp -I$(HOME)/include -std=c99' \
-		CLIBS='-L$(HOME)/lib -Wl,-rpath=$(HOME)/lib -lgomp -lamdlibm -lopenblas -ltcmalloc $$CLIBS' -v \
-		COPTIMFLAGS='-O3 -DNDEBUG' LDOPTIMFLAGS='-O3' \
-		-outdir ../build \
-		lcexplogit.c ../build/lcexplogit_c.o
-	echo -e ${RED}Before running Matlab, set LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6${NC}
-	
+# mex: build/lcexplogit_c.o src/lcexplogit.c
+	# cd src && \
+	# mex CFLAGS='$$CFLAGS -fopenmp -I$(HOME)/include -std=c99' \
+		# CLIBS='-L$(HOME)/lib -lgomp -lopenblas $$CLIBS' -v \
+		# COPTIMFLAGS='-O3 -DNDEBUG' LDOPTIMFLAGS='-O3' \
+		# -outdir ../build \
+		# lcexplogit.c ../build/lcexplogit_c.o
+		
+mex:
+	cd src/; \
+		matlab -r "build_all; exit" -nodesktop -nosplash
+
+test:
+	cd tests/; \
+		matlab -r "test_explogit; exit" -nodesktop -nojvm -nosplash
+
 build/lcexplogit_c.o: src/lcexplogit_c.c
 	$(CC) $(CCFLAGS) -c src/lcexplogit_c.c -o build/lcexplogit_c.o
 

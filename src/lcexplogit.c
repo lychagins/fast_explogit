@@ -1,8 +1,6 @@
 /* MEX interface for the latent class exploded logit likelihood function */
 
 #include <stdint.h>
-typedef uint16_t char16_t;
-
 #include "mex.h"
 #include "lcexplogit.h"
 
@@ -30,7 +28,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 	nlisted = (uint16_t *)mxGetData(prhs[4]);
 	num_agents = mxGetM(prhs[3]);
 
-	
 	/* Output */
 	plhs[0] = mxCreateDoubleMatrix(1, 1, mxREAL);
 	loglik = mxGetPr(plhs[0]);
