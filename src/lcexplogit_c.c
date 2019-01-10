@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 //#include <omp.h>
-#include <cblas.h>
+#include "cblas.h"
 #include <string.h>
 #include <stdint.h>
 #include "lcexplogit.h"

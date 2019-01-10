@@ -1,16 +1,10 @@
-RED			='\033[1;31m'
-NC			='\033[0m' # No Color
-
 CC			= gcc
 
-CCFLAGS		= -Wall -O3 -fopenmp -v \
-			-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free \
+CCFLAGS		= -Wall -O3 -v \
 			-I$(HOME)/include -L$(HOME)/lib
 			
-CLDFLAGS 	= 	$(HOME)/lib/libamdlibm.a \
-			$(HOME)/lib/libopenblas.a \
-			-Wl,-rpath=$(HOME)/lib \
-			-ltcmalloc
+CLDFLAGS 	= $(HOME)/lib/libopenblas.a \
+			-Wl,-rpath=$(HOME)/lib
 			
 PCCFLAGS	= $(CCFLAGS) \
 			-DWITHGPERFTOOLS -g
@@ -30,7 +24,7 @@ PLDFLAGS	= $(CLDFLAGS) \
 	# ./wrapper_c
 	# pprof --text --lines ./wrapper_c explogit.profile
 	
-# mex: build/lcexplogit_c.o src/lcexplogit.c
+#mex: build/lcexplogit_c.o src/lcexplogit.c
 	# cd src && \
 	# mex CFLAGS='$$CFLAGS -fopenmp -I$(HOME)/include -std=c99' \
 		# CLIBS='-L$(HOME)/lib -lgomp -lopenblas $$CLIBS' -v \
@@ -39,15 +33,20 @@ PLDFLAGS	= $(CLDFLAGS) \
 		# lcexplogit.c ../build/lcexplogit_c.o
 		
 mex:
+	$(CC) $(CCFLAGS) -c src/lcexplogit_c.c -o build/lcexplogit_c.o
+	mex CFLAGS='$$CFLAGS -I$(HOME)/include -std=c99' \
+		CLIBS='-L$(HOME)/lib -Wl,-rpath=$(HOME)/lib -lopenblas $$CLIBS' \
+		COPTIMFLAGS='-O3 -DNDEBUG' \
+		LDOPTIMFLAGS='-O3' \
+		-outdir build -v \
+		src/lcexplogit.c build/lcexplogit_c.o
 	cd src/; \
-		matlab -r "build_all; exit" -nodesktop -nosplash
+		matlab -r "build_all; exit" -nodesktop -nosplash; \
+		
 
 test:
 	cd tests/; \
-		matlab -r "test_explogit; exit" -nodesktop -nojvm -nosplash
-
-build/lcexplogit_c.o: src/lcexplogit_c.c
-	$(CC) $(CCFLAGS) -c src/lcexplogit_c.c -o build/lcexplogit_c.o
+		matlab -r "test_explogit; test_lcexplogit; exit" -nodesktop -nojvm -nosplash
 
 clean:
 	rm -f 	build/* \
