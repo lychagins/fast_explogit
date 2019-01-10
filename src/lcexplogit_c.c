@@ -29,7 +29,7 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 	size_t num_choices, cssize, csmax;
 	
 	/* Pointers for the vector of mean values: first/last/current/pref. list boundary */
-	double *u, *u_first;
+	double *u, *u_first, *v;
 
 	/* Probability of observing the preference list; unconditional. First element and
 	 *  a movable pointer. */
@@ -116,7 +116,7 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 		pr_type = pr_type_first + i*num_agents;
 		dpr_type_db = dpr_type_db_first + i*num_agents*num_covariates;
 		u = u_first + i*num_choices;
-		double *v = (double *)malloc(csmax*sizeof(double));
+		v = (double *)malloc(csmax*sizeof(double));
 		
 		numer = (double *)malloc(num_covariates*sizeof(double));
 		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
