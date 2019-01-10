@@ -1,10 +1,9 @@
-#include <stdlib.h>
-#include <stdio.h>
 #include <math.h>
-//#include <omp.h>
-#include "cblas.h"
 #include <string.h>
 #include <stdint.h>
+
+#include "mex.h"
+#include "blas.h"
 #include "lcexplogit.h"
 
 double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_agents,\
@@ -19,6 +18,12 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 	
 	/* Return value -- loglikelihood (matrix of one element) */
 	double loglik;
+	
+	/* Fortran BLAS only accepts constants by reference */
+	double one = 1.0, zero = 0.0;
+	char *chn = "N";
+	char *cht = "T";
+	size_t ntypes = num_types, nx = num_covariates, na = num_agents, onei = 1;
 
 	/* Various dimensions of data */
 	size_t num_choices, cssize, csmax;
@@ -96,9 +101,9 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 	
 	X_first = X;
  	/* openblas_set_num_threads(omp_get_num_procs()); */
-	cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, \
-		num_choices, num_types, num_covariates, 1, X, num_covariates, \
-		raw_param, num_covariates, 0, u_first, num_choices);
+	dgemm(cht, chn, \
+		&num_choices, &ntypes, &nx, &one, X, &nx, \
+		raw_param, &nx, &zero, u_first, &num_choices);
 	/* omp_set_num_threads(num_types); */
 	#pragma omp parallel for \
 		private(u, xb, denom, logpr_type, l, l_last, \
@@ -151,8 +156,8 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 			}
 			u += l_last;
 
-			cblas_dgemv(CblasColMajor, CblasNoTrans, num_covariates, l_last, \
-				1.0, X, num_covariates, v, 1, 0.0, numer, 1);
+			dgemv(chn, &nx, &l_last, &one, \
+				X, &nx, v, &onei, &zero, numer, &onei);
 			X += num_covariates*l_last;
 			
 			/* Go over the preference list in reverse order */
@@ -180,8 +185,8 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 		free(v);
 	}
 	
-	cblas_dgemv(CblasColMajor, CblasNoTrans, num_agents, num_types, \
-				1.0, pr_type_first, num_agents, w_t, 1, 0.0, pr_first, 1);
+	dgemv(chn, &na, &ntypes, \
+				&one, pr_type_first, &na, w_t, &onei, &zero, pr_first, &onei);
 
 	/*-------------------------------------------------------------------------
 	 * Accumulate gradients
