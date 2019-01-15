@@ -3,10 +3,9 @@
 #include <stdint.h>
 
 #include "mex.h"
-#include "blas.h"
 #include "lcexplogit.h"
 
-double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_agents,\
+double lcexplogit(double *raw_param, size_t num_types, size_t num_covariates, size_t num_agents,\
 	double *X, uint16_t *nskipped, uint16_t *nlisted, double *grad)
 {
 
@@ -23,7 +22,7 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 	double one = 1.0, zero = 0.0;
 	char *chn = "N";
 	char *cht = "T";
-	size_t ntypes = num_types, nx = num_covariates, na = num_agents, onei = 1;
+	size_t onei = 1;
 
 	/* Various dimensions of data */
 	size_t num_choices, cssize, csmax;
@@ -102,8 +101,8 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 	X_first = X;
  	/* openblas_set_num_threads(omp_get_num_procs()); */
 	dgemm(cht, chn, \
-		&num_choices, &ntypes, &nx, &one, X, &nx, \
-		raw_param, &nx, &zero, u_first, &num_choices);
+		&num_choices, &num_types, &num_covariates, &one, X, &num_covariates, \
+		raw_param, &num_covariates, &zero, u_first, &num_choices);
 	/* omp_set_num_threads(num_types); */
 	#pragma omp parallel for \
 		private(u, xb, denom, logpr_type, l, l_last, \
@@ -156,8 +155,8 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 			}
 			u += l_last;
 
-			dgemv(chn, &nx, &l_last, &one, \
-				X, &nx, v, &onei, &zero, numer, &onei);
+			dgemv(chn, &num_covariates, &l_last, &one, \
+				X, &num_covariates, v, &onei, &zero, numer, &onei);
 			X += num_covariates*l_last;
 			
 			/* Go over the preference list in reverse order */
@@ -185,8 +184,8 @@ double lcexplogit(double *raw_param, int num_types, int num_covariates, int num_
 		free(v);
 	}
 	
-	dgemv(chn, &na, &ntypes, \
-				&one, pr_type_first, &na, w_t, &onei, &zero, pr_first, &onei);
+	dgemv(chn, &num_agents, &num_types, \
+				&one, pr_type_first, &num_agents, w_t, &onei, &zero, pr_first, &onei);
 
 	/*-------------------------------------------------------------------------
 	 * Accumulate gradients
