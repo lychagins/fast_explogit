@@ -13,13 +13,14 @@ By default, the build uses Matlab's own BLAS and doesn't rely on OpenMP. To enab
 make CFLAGS_EXT=-fopenmp LDFLAGS_EXT=-fopenmp
 ```
 To use an external BLAS library, run
+```
 make BLAS_NAME=blas_name BLAS_PATH=blas_path
 ```
 For example, assuming that OpenBLAS is installed as `~/OpenBLAS/lib/libopenblas.so`, type 
 ```
 make BLAS_NAME=openblas BLAS_PATH=~/OpenBLAS/lib CFLAGS_EXT=-fopenmp LDFLAGS_EXT=-fopenmp
 ```
-enable both OpenMP and OpenBLAS.
+to enable both OpenMP and OpenBLAS.
 
 Run 
 ```
