@@ -105,10 +105,10 @@ double lcexplogit(double *raw_param, size_t num_types, size_t num_covariates, si
 		raw_param, &num_covariates, &zero, u_first, &num_choices);
 	/* omp_set_num_threads(num_types); */
 	#pragma omp parallel for \
-		private(u, xb, denom, logpr_type, l, l_last, \
+		private(u, v, xb, denom, logpr_type, l, l_last, \
 			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db, max_u) \
 		shared(X_first, pr_type_first, num_choices, num_covariates, u_first, csmax, \
-			num_types, num_agents, nlisted, nskipped, dpr_type_db_first) \
+			num_types, num_agents, nlisted, nskipped, dpr_type_db_first, onei, one, zero, chn) \
 		default(none)
 	for (i=0; i<num_types; i++) {
 		/* Initialize pointers for type i */

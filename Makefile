@@ -8,6 +8,14 @@ endif
 export BLAS_LFLAGS
 export BLAS_DFLAG
 
+ifdef LDFLAGS_EXT
+export LDFLAGS_EXT
+endif
+
+ifdef CFLAGS_EXT
+export CFLAGS_EXT
+endif
+
 VPATH = src:tests
 
 source = build_all.m lcexplogit.c lcexplogit.h lcexplogit_c.c explogit.c explogit.h explogit_c.c
