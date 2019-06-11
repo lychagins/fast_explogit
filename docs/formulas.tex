@@ -1,0 +1,139 @@
+\documentclass[12pt]{article}
+\usepackage{hyperref}
+\usepackage{natbib}
+\usepackage[english]{babel}
+\usepackage{amsmath,amsthm,amssymb}
+\usepackage{setspace}
+\usepackage{lscape}
+\usepackage{caption}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{epstopdf}
+
+\geometry{left=1in,right=1in,top=1in,bottom=1in}
+\onehalfspacing
+
+
+\begin{document}
+
+\section{Theory}
+
+There are $N$ agents in the sample. Agent $i$ chooses $K_i$ most preferred options from a personal choice set $C_i$ and ranks them in the order of preference. $L_i$ denotes $i$'s preference list, whereas $L_{ik}$ stands for $k^{th}$ best item.
+
+Agent's preferences are given by the utility function
+\begin{equation*}
+	U_{ijt} = X_{ij}'\beta_t + \varepsilon_{ijt}
+\end{equation*}
+Agent's utility depends on the vector of choice characteristics $X_{ij}$, idiosyncratic shocks $\varepsilon_{ijt}$ and agent type $t$ (``latent class''). The vector $X_{ij}$ is observed in the data, while $\varepsilon_{ijt}$ and $t$ are not.
+
+The idiosyncratic shocks are drawn from the standard Gumbel distribution.\footnote{The distribution function for $\varepsilon_{ijt}$ is $\exp(-\exp(-\varepsilon))$.} These shocks are independent across agents and choices; they also don't depend on $X_{ij}$ or $t$. The distribution of latent classes is paramaterized by $\alpha_t$:
+\begin{equation*}
+	\omega_t = \Pr\{t_i=t\} = \frac{\exp\alpha_t}{\sum_{s=1}^T\exp\alpha_s}, \quad t=1,\dots,T.
+\end{equation*}
+Without the loss of generality, $\alpha_T$ is normalized to zero.
+
+To allow for stratified sampling, let $w_i$ denote a weight inversely proportional to the sampling rate used for $i$'s subpopulation.\footnote{The definition of $w_i$ is similar to that of pweight in Stata.} For instance, suppose that the sampling rates for males and females are 50\% and 100\% respectively. That is, the sample contains every female and every second male in the population. Then, $w_i = 2$ if $i$ is male and $w_i=1$ otherwise: every male in the sample represents two males in the population.
+
+For each agent in the sample, the dataset includes
+\begin{itemize}
+	\item The choice set, $C_i$,
+	\item Covariates for all feasible choices, $X_i = [X_{ij}]_{j\in C_i}$,
+	\item The ranked list of top $K_i$ choices, $L_i$.
+\end{itemize}
+
+The unknown parameters are
+\begin{itemize}
+	\item Preference coefficients, by latent class, $\beta = [\beta_1,\dots, \beta_T]$,
+	\item The distribution of latent classes, $\alpha = [\alpha_1,\dots,\alpha_{T-1}]$.
+\end{itemize}
+
+\subsection{Likelihood Function}
+Let $\delta_{ijt} = X_{ij}'\beta_t$. The log likelihood function is given by
+\begin{equation}
+	\mathcal{L}
+		= 	\sum_{i=1}^N w_i \ln\Pr\{L=L_i|X_i\} = \sum_{i=1}^N w_i \ln\left[\sum_{t=1}^T\omega_t\Pr\{L=L_i|X_i, t\}\right]\label{eq:logl}
+\end{equation}
+
+As one conditions on the covariates and the latent class, the likelihood function takes the standard ``exploded logit'' form:
+\begin{equation}\label{eq:cond logl}
+\Pr\{L=L_i|X_i, t\}
+	=	\prod_{k=1}^{K_i}\frac{\exp{\delta_{iL_{ik}t}}}{\Delta_{it} + \sum_{m=k}^{K_i}\exp{\delta_{iL_{im}t}}}
+\end{equation}
+where $\Delta_{it} = \sum_{j\in{C_i\setminus{}L_i}}\exp(\delta_{ijt})$.
+
+
+
+\subsection{Gradient Vector}
+First, note that the parametrization for $\omega$ implies
+\begin{equation*}
+\frac{\partial\omega_s}{\partial\alpha_t} = \left\{
+\begin{array}{ll}
+-\omega_s\omega_t,      & \text{if $s\neq t$} \\
+\omega_t(1 - \omega_t), & \text{otherwise}
+\end{array}\right.
+\end{equation*}
+This expression is used to obtain the derivatives of the loglikelihood function with respect to $\alpha$:
+\begin{align}
+\frac{\partial\mathcal{L}}{\partial{\alpha_t}}
+	&= 	\sum_{i=1}^N\frac{w_i}{\Pr\{L=L_i|X_i\}}
+		\left[
+			\sum_{s=1}^T\frac{\partial\omega_s}{\partial{\alpha_t}}\Pr\{L=L_i|X_i,s\}
+		\right]\notag\\
+	&=	\sum_{i=1}^N w_i\omega_t\left[\frac{\Pr\{L=L_i|x_i, t\}}{\Pr\{L=L_i|x_i\}}-1\right]\label{eq:dlogl alpha}
+\end{align}
+
+For type-specific preference parameters $\beta_t$, the derivative is
+\begin{equation}
+\frac{\partial\mathcal{L}}{\partial{\beta_t}}
+= 	\sum_{i=1}^N\frac{w_i}{\Pr\{L=L_i|X_i\}}
+\left[
+\omega_t\frac{\partial}{\partial{\beta_t}}\Pr\{L=L_i|X_i,t\}
+\right]\label{eq:dlogl beta}
+\end{equation}
+In order to find the derivative of the conditional loglikelihood, it is convenient to switch to logarithms:
+\begin{align}
+	\frac{\partial}{\partial{\beta_t}}\ln\Pr\{L=L_i|X_i,t\}
+		&=	\frac{\partial}{\partial{\beta_t}}\ln
+			\left[
+				\prod_{k=1}^{K_i}\frac{\exp{\delta_{iL_{ik}t}}}{\Delta_{it} + \sum_{m=k}^{K_i}\exp{\delta_{iL_{im}t}}}
+			\right]\notag\\
+		&=	\sum_{k=1}^{K_i}\frac{\partial}{\partial{\beta_t}}
+			\left[\delta_{iL_{ik}t} - \ln\left(\Delta_{it} + \sum_{m=k}^{K_i}\exp{\delta_{iL_{im}t}}\right)
+			\right]\notag\\
+		&=	\sum_{k=1}^{K_i}\left[\frac{\partial\delta_{iL_{ik}t}}{\partial{\beta_t}} 
+				- \frac{
+						\frac{\partial\Delta_{it}}{\partial\beta_t}
+						+ \sum_{m=k}^{K_i}\frac{\partial\delta_{iL_{im}t}}{\partial{\beta_t}}
+							\exp{\delta_{iL_{im}t}}
+					}{
+						\Delta_{it} + \sum_{m=k}^{K_i}\exp{\delta_{iL_{im}t}}
+					}
+			\right]\notag\\
+		&=	\sum_{k=1}^{K_i}\left[
+				X_{iL_{ik}} 
+				- \frac{
+					\sum_{j\in{C_i\setminus{L_i}}}X_{ij}\exp{\delta_{ijt}}
+					+ \sum_{m=k}^{K_i}X_{iL_{im}}\exp{\delta_{iL_{im}t}}
+				}{
+					\Delta_{it} + \sum_{m=k}^{K_i}\exp{\delta_{iL_{im}t}}
+				}
+			\right]\label{eq:cond dlogl}
+\end{align}
+
+\subsection{Notes on Computation}
+
+Roughly speaking, the algorithm works as follows:
+\begin{enumerate}
+	\item{}Compute $\exp\delta_{ijt}$ for all $i$, $t$ and $j\in C_i$. This step tends to account for a significant portion of the total computation time.
+	\item{}Loop over agents and types. For each agent-type pair $(i,t)$:
+	\begin{enumerate}
+		\item\label{loop:2a} Compute the sums over inferior choices, $\Delta_{it}$ and  $\sum_{j\in{C_i\setminus{L_i}}}X_{ij}\exp{\delta_{ijt}}$.
+		\item\label{loop:2b} Loop over choices in $L_i$ going backwards from $L_{iK_i}$ to $L_{i1}$. Compute the denominator in (\ref{eq:cond logl}) by accumulating $\exp\delta_{iL_{im}t}$ on each step. Compute the numerator in (\ref{eq:cond dlogl}) by accumulating $X_{iL_{im}}\exp\delta_{iL_{im}t}$. Use the results to find the contribution of each element $k$ of $L_i$ into (\ref{eq:cond logl}) and (\ref{eq:cond dlogl}), accumulate the product in (\ref{eq:cond logl}) and the sum in (\ref{eq:cond dlogl}).
+		 
+	\end{enumerate}
+	\item{}Use $\Pr\{L=L_i|X_i,t\}$ its gradient found above to calculate the unconditional probabilities $\Pr\{L=L_i|X_i\}$.
+	\item Put everything together. Find the likelihood function in (\ref{eq:logl}) and its gradient in (\ref{eq:dlogl alpha}) and (\ref{eq:dlogl beta}).
+\end{enumerate}
+Note that the loops in \ref{loop:2a} and \ref{loop:2b} run most efficiently if data on choices of each agent are stored contiguously. Unlisted part of the choice set ($C_i\setminus L_i$) should come first followed by the ranked choices, $L_i$, in the reverse order. This is the reason why the dataset has to be arranged in the memory in a certain way before the loglikelihood function and its derivatives can be calculated.
+
+\end{document}
