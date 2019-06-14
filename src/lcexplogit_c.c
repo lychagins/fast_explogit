@@ -5,8 +5,15 @@
 #include "mex.h"
 #include "lcexplogit.h"
 
-double lcexplogit(double *raw_param, size_t num_types, size_t num_covariates, size_t num_agents,\
-	double *X, uint16_t *nskipped, uint16_t *nlisted, double *grad)
+double lcexplogit(double *raw_param,\
+        size_t num_types,\
+        size_t num_covariates,\
+        size_t num_agents,\
+        double *X,\
+        uint16_t *nskipped,\
+        uint16_t *nlisted,\
+        double *weight,\
+        double *grad)
 {
 
 	/* Pointers for the matrix of covariates: first/last/current elements */
@@ -204,10 +211,10 @@ double lcexplogit(double *raw_param, size_t num_types, size_t num_covariates, si
 			
 			/* Compute conditional-to-marginal probability ratio. This is a
 			 * common multiplier in all gradient terms */
-			p_ratio = w_cur*(*pr_type++)/(*pr++);
+			p_ratio = weight[k]*w_cur*(*pr_type++)/(*pr++);
 			
 			/* Accumulate parts of the gradient responsible for type mix */
-			dldw[i] += p_ratio - w_cur;
+			dldw[i] += p_ratio - weight[k]*w_cur;
 			
 			for (j=0; j<num_covariates; j++) {
 				
@@ -229,7 +236,7 @@ double lcexplogit(double *raw_param, size_t num_types, size_t num_covariates, si
 	pr = pr_first;
 	loglik = 0;
 	for (i=0; i<num_agents; i++) {
-		loglik += log(pr[i]);
+		loglik += weight[i]*log(pr[i]);
 	}
 	
 	/* Save the gradient */

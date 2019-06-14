@@ -8,6 +8,7 @@ double lcexplogit(double *raw_param, \
 	double *X, \
 	uint16_t *nskipped, \
 	uint16_t *nlisted, \
+    double *weight,\
 	double *grad);
 
 

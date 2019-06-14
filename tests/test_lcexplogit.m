@@ -45,4 +45,47 @@ assert(all(abs(sum(grad3(3:2:7)) - grad(1)) < 1e-8), ...
 assert(all(abs(sum(grad3(4:2:8)) - grad(2)) < 1e-8), ...
     'Loglikelihood gradient does not match expected value on the test dataset.');
 
+%--------------------------------------------------------------------------
+% Unit weights
+%--------------------------------------------------------------------------
+[logl3w, grad3w] = lcexplogit([2 5 1 1 1 1 1 1], 3, x',...
+    nskipped, nlisted, ones(size(nskipped)));
+assert(abs(logl3 - logl3w) < 1e-7, ...
+    'Passing the default weights explicitly results in unexpected loglikelihood.');
+assert(all(abs(grad3 - grad3w) < 1e-7), ...
+    'Passing the default weights explicitly results in unexpected loglikelihood gradient.');
+
+%--------------------------------------------------------------------------
+% Scaling weights
+%--------------------------------------------------------------------------
+[logl3w, grad3w] = lcexplogit([2 5 1 1 1 1 1 1], 3, x',...
+    nskipped, nlisted, 2*ones(size(nskipped)));
+assert(abs(logl3 - logl3w/2) < 1e-7, ...
+    'Loglikelihood is sensitive to the scale of sampling weights.');
+assert(all(abs(grad3 - grad3w/2) < 1e-7), ...
+    'Loglikelihood gradient is sensitive to the scale of sampling weights.');
+
+%--------------------------------------------------------------------------
+% Using weights to select the sample
+%--------------------------------------------------------------------------
+% Create an agent index
+ix = zeros(sum(nlisted+nskipped), 1);
+j = 0;
+for i = 1:numel(nlisted)
+    n = nlisted(i)+nskipped(i);
+    ix(j+1:j+n) = i;
+    j = j+n;
+end
+
+tokeep = mod(1:100,2)' == 0;
+[logl3, grad3] = lcexplogit([2 5 1 1 1 1 1 1], 3, x(tokeep(ix),:)',...
+    nskipped(tokeep), nlisted(tokeep));
+[logl3w, grad3w] = lcexplogit([2 5 1 1 1 1 1 1], 3, x',...
+    nskipped, nlisted, double(tokeep));
+assert(abs(logl3 - logl3w) < 1e-7, ...
+    'Using zero weights to exclude observations leads to unexpected results.');
+assert(all(abs(grad3 - grad3w) < 1e-7), ...
+    'Using zero weights to exclude observations leads to unexpected results.');
+
+
 disp('Latent class exploded logit: PASSED');
