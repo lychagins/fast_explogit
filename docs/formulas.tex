@@ -3,7 +3,7 @@
 \usepackage{natbib}
 \usepackage[english]{babel}
 \usepackage{amsmath,amsthm,amssymb}
-\usepackage{setspace}
+\usepackage[onehalfspacing]{setspace}
 \usepackage{lscape}
 \usepackage{caption}
 \usepackage{geometry}
@@ -135,5 +135,46 @@ Roughly speaking, the algorithm works as follows:
 	\item Put everything together. Find the likelihood function in (\ref{eq:logl}) and its gradient in (\ref{eq:dlogl alpha}) and (\ref{eq:dlogl beta}).
 \end{enumerate}
 Note that the loops in \ref{loop:2a} and \ref{loop:2b} run most efficiently if data on choices of each agent are stored contiguously. Unlisted part of the choice set ($C_i\setminus L_i$) should come first followed by the ranked choices, $L_i$, in the reverse order. This is the reason why the dataset has to be arranged in the memory in a certain way before the loglikelihood function and its derivatives can be calculated.
+
+
+\section{Usage}
+
+\subsection{Exploded logit}
+\texttt{[logl, grad] = explogit(beta, X, nskipped, nlisted, weight)}
+
+\begin{tabular}{lp{0.5\textwidth}ll}\\\hline\hline
+	Name 		& Description & Dimensions & Type\\\hline
+	\multicolumn{4}{c}{Arguments}\\\hline
+	beta 		& Vector of logit coefficients, & $M$ & double\\
+	X 			& Matrix of covariates. Rows correspond to covariates, columns correspond to agent-choice pairs. & $M\times C$ & double \\
+	nskipped 	& Number of skipped choices for each agent, & $N$ & uint16 \\
+	nlisted 	& Number of listed choices for each agent, & $N$ & uint16 \\
+	weight		& Optional argument. Agent i in the sample represents weight(i) agents in the population. Default: the vector of ones, & $N$ & double\\\hline
+	
+	\multicolumn{4}{c}{Return values}\\\hline
+	logl		& Loglikelihood function, & 1 & double\\
+	grad		& Gradient of logl. & $M$ & double\\\hline\hline
+\end{tabular}\\
+
+$M$ is the number of covariates in $X_{ij}$. $C$ is the total number of agent-choice combinations: $C=\sum_{i=1}^NC_i$.
+\clearpage
+\subsection{Latent class exploded logit}
+
+\texttt{[logl, grad] = lcexplogit(beta, nclasses, X, nskipped, nlisted, weight)}
+
+\begin{tabular}{lp{0.5\textwidth}ll}\\\hline\hline
+	Name 		& Description & Dimensions & Type\\\hline
+	\multicolumn{4}{c}{Arguments}\\\hline
+	beta 		& The first $T-1$ elements are $\alpha_2,\dots,\alpha_T$. The remaining $MT$ elements are $[\beta_1,\dots,\beta_T]$, & $(M+1)T-1$ & double\\
+	nclasses    & $T$, the number of latent classes, & $1$ & int \\
+	X 			& Matrix of covariates. Rows correspond to covariates, columns correspond to agent-choice pairs, & $M\times C$ & double \\
+	nskipped 	& Number of skipped choices for each agent, & $N$ & uint16 \\
+	nlisted 	& Number of listed choices for each agent, & $N$ & uint16 \\
+	weight		& Optional argument. Agent i in the sample represents weight(i) agents in the population. Default: the vector of ones, & $N$ & double\\\hline
+	
+	\multicolumn{4}{c}{Return values}\\\hline
+	logl		& Loglikelihood function, & 1 & double\\
+	grad		& Gradient of logl. & $(M+1)T-1$ & double\\\hline\hline
+\end{tabular}
 
 \end{document}
