@@ -30,7 +30,7 @@ The idiosyncratic shocks are drawn from the standard Gumbel distribution.\footno
 \begin{equation*}
 	\omega_t = \Pr\{t_i=t\} = \frac{\exp\alpha_t}{\sum_{s=1}^T\exp\alpha_s}, \quad t=1,\dots,T.
 \end{equation*}
-Without the loss of generality, $\alpha_T$ is normalized to zero.
+Without the loss of generality, $\alpha_1$ is normalized to zero.
 
 To allow for stratified sampling, let $w_i$ denote a weight inversely proportional to the sampling rate used for $i$'s subpopulation.\footnote{The definition of $w_i$ is similar to that of pweight in Stata.} For instance, suppose that the sampling rates for males and females are 50\% and 100\% respectively. That is, the sample contains every female and every second male in the population. Then, $w_i = 2$ if $i$ is male and $w_i=1$ otherwise: every male in the sample represents two males in the population.
 

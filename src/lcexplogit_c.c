@@ -7,7 +7,7 @@
 
 double lcexplogit(double *raw_param,\
         size_t num_types,\
-        size_t num_covariates,\
+        size_t num_covar,\
         size_t num_agents,\
         double *X,\
         uint16_t *nskipped,\
@@ -16,7 +16,7 @@ double lcexplogit(double *raw_param,\
         double *grad)
 {
 
-	/* Pointers for the matrix of covariates: first/last/current elements */
+	/* First element in the matrix of covariates */
 	double *X_first;
 
 	/* Same parameters in a more convenient shape: shares of types */
@@ -25,7 +25,8 @@ double lcexplogit(double *raw_param,\
 	/* Return value -- loglikelihood (matrix of one element) */
 	double loglik;
 	
-	/* Fortran BLAS only accepts constants by reference */
+	/* Declare constants for BLAS calls. Fortran BLAS only accepts 
+     * constants by reference */
 	double one = 1.0, zero = 0.0;
 	char *chn = "N";
 	char *cht = "T";
@@ -34,35 +35,33 @@ double lcexplogit(double *raw_param,\
 	/* Various dimensions of data */
 	size_t num_choices, cssize, csmax;
 	
-	/* Pointers for the vector of mean values: first/last/current/pref. list boundary */
-	double *u, *u_first, *v;
+	/* Mean values: current, first element, exponential */
+	double *xbeta, *xbeta_first, *expxbeta;
 
-	/* Probability of observing the preference list; unconditional. First element and
-	 *  a movable pointer. */
+	/* Probability of observing the preference list; unconditional. First 
+     * element and a movable pointer. */
 	double *pr, *pr_first;
-	double *pr_type, *pr_type_first; /* Same probability, but conditional on type */
+	double *prt, *prt_first; /* Same probability, but conditional on type */
 	
 	/* Workspace for computing components of the gradient and the logit shares */
-	double *dpr_type_db, *dpr_type_db_first, *numer, *dpr_mult, \
-		denom, expu, xb, x, p_ratio, max_u;
+	double *dlogprt_db, *dlogprt_db_first, *numer, \
+		denom, expxb, xb, x, p_ratio, max_xbeta;
 	
 	/* Generic indices */
 	size_t i, j, k, l, l_last;
 
-	double *dldw, *dldb, *dldb_first;
+	double *dl_dalpha, *dl_dbeta, *dl_dbeta_first;
 
 	/* Workspace for fast access to type weights, mean utility (perhaps, compiler 
 	 * optimizations make using these variables) */
 	double w_cur;
 	/* In case we want to accumulate individual likelihood in the log space */
-	double logpr_type;
+	double logprt;
 	
-	
-	/*-------------------------------------------------------------------------
-	 * Read and transform parameters
-	 *-----------------------------------------------------------------------*/
-	
+	/* Number of choices. Should match one dimension of X: total number of 
+     * elements in X = num_covar*num_choices. */
 	num_choices = 0;
+    /* Maximum number of choices faced by one agent */
 	csmax = 0;
 	for (i=0; i<num_agents; i++) {
 		cssize = nlisted[i] + nskipped[i];
@@ -71,14 +70,17 @@ double lcexplogit(double *raw_param,\
 			csmax = cssize;
 		}
 	}
-	
+
+    /*-------------------------------------------------------------------------
+	 * Read and transform the parameters
+	 *-----------------------------------------------------------------------*/
 	w_t = (double *)malloc(num_types*sizeof(double));
 	w_t[0] = 1;
 	denom = 1;
 	for (i=1; i<num_types; i++) {
-		expu = exp(*raw_param++);
-		w_t[i] = expu;
-		denom += expu;
+		expxb = exp(*raw_param++);
+		w_t[i] = expxb;
+		denom += expxb;
 	}
 
 	for (i=0; i<num_types; i++) {
@@ -88,119 +90,139 @@ double lcexplogit(double *raw_param,\
 	/*-------------------------------------------------------------------------
 	 * Allocate workspace here
 	 *-----------------------------------------------------------------------*/	
-	/* To compute the gradient of loglikelihood, we need to know unconditional 
-	 * probabilities. Therefore, we have to store some of the gradient's components */
+	/* Array for the individual likelihood function,
+     * Pr{L_i|X_i} */
 	pr_first = (double *)calloc(num_agents, sizeof(double));
-	pr_type_first = (double *)malloc(num_agents*num_types*sizeof(double));
+    
+    /* Array for the individual likelihood conditional on type, 
+     * Pr{L_i|X_i, t_i} */
+	prt_first = (double *)malloc(num_agents*num_types*sizeof(double));
 	
-	/* Derivatives of the conditional choice probability, by student and type */
-	dpr_type_db_first = (double *)calloc(num_agents*num_types*num_covariates,\
+	/* Derivative of ln(Pr{L_i|X_i, t_i}) with respect to beta_t_i,
+     * the coefficient on X in type t_i's utility function */
+	dlogprt_db_first = (double *)calloc(num_agents*num_types*num_covar,\
 		sizeof(double));
 	
-	/* This is where we accumulate the gradient w.r.t. the type weight parameters */
-	dldw = (double *)calloc(num_types, sizeof(double));
+	/* Derivatives of L = sum_i ln(Pr{L_i|X_i}) with respect to the type 
+     * weight parameters, \alpha_i */
+	dl_dalpha = (double *)calloc(num_types, sizeof(double));
 
-	/* This is where we accumulate the gradient w.r.t. to the type-specific utility parameters */
-	dldb_first = (double *)calloc(num_types*num_covariates, sizeof(double));
+	/* Derivatives of L with respect to beta_t, type-specific coefficients 
+     * on X from the utility function */
+	dl_dbeta_first = (double *)calloc(num_types*num_covar, sizeof(double));
 	
-	u_first = (double *)malloc(num_choices*num_types*sizeof(double));
+    /* Type-specific mean utility, beta_t*X_i, for each agent, choice and 
+     * unobservable agent type */
+	xbeta_first = (double *)malloc(num_choices*num_types*sizeof(double));
 	
-	X_first = X;
- 	/* openblas_set_num_threads(omp_get_num_procs()); */
-	dgemm(cht, chn, \
-		&num_choices, &num_types, &num_covariates, &one, X, &num_covariates, \
-		raw_param, &num_covariates, &zero, u_first, &num_choices);
-	/* omp_set_num_threads(num_types); */
+	/* First element of X */
+    X_first = X;
+    
+    /* Variables ending with "_first" are pointers to the first element 
+     * in the respective array. These pointers are not supposed to move. */
+ 	
+    #ifdef EXTERNAL_BLAS
+            openblas_set_num_threads(omp_get_num_procs());
+    #endif
+	
+    dgemm(cht, chn, \
+		&num_choices, &num_types, &num_covar, \
+        &one, X, &num_covar, raw_param, &num_covar, &zero, \
+        xbeta_first, &num_choices);
+    
+	#ifdef _OPENMP
+            omp_set_num_threads(num_types);
+    #endif
+    
 	#pragma omp parallel for \
-		private(u, v, xb, denom, logpr_type, l, l_last, \
-			numer, dpr_mult, expu, i, j, k, pr_type, X, x, dpr_type_db, max_u) \
-		shared(X_first, pr_type_first, num_choices, num_covariates, u_first, csmax, \
-			num_types, num_agents, nlisted, nskipped, dpr_type_db_first, onei, one, zero, chn) \
+		private(xbeta, expxbeta, max_xbeta, xb, denom, logprt, l, l_last, \
+			numer, expxb, i, j, k, prt, X, x, dlogprt_db) \
+		shared(X_first, prt_first, num_choices, num_covar,\
+            xbeta_first, csmax, num_types, num_agents, nlisted, nskipped,\
+            dlogprt_db_first, onei, one, zero, chn) \
 		default(none)
 	for (i=0; i<num_types; i++) {
-		/* Initialize pointers for type i */
-		pr_type = pr_type_first + i*num_agents;
-		dpr_type_db = dpr_type_db_first + i*num_agents*num_covariates;
-		u = u_first + i*num_choices;
-		v = (double *)malloc(csmax*sizeof(double));
 		
-		numer = (double *)malloc(num_covariates*sizeof(double));
-		dpr_mult = (double *)malloc(num_covariates*sizeof(double));
-
-		/* Reset X pointer */
+        /* Initialize pointers for type i */
+		prt = prt_first + i*num_agents;
+		dlogprt_db = dlogprt_db_first + i*num_agents*num_covar;
+		xbeta = xbeta_first + i*num_choices;
+		/* Reset the X pointer */
 		X = X_first;
+        
+        /* Allocate workspace */
+        expxbeta = (double *)malloc(csmax*sizeof(double));
+		numer = (double *)malloc(num_covar*sizeof(double));
 		
-		/* Index for the "short stack" array */
+		/* Index for the array of agent-specific choices */
 		l = 0;
 
-		/* Loop over students */
+		/* Loop over agents */
 		for (k=0; k<num_agents; k++){
 			
 			/* Initialize accumulators */
 			denom = 0.0;
-			logpr_type = 0.0;
-			memset(dpr_mult, 0, num_covariates*sizeof(double));
-			memset(numer, 0, num_covariates*sizeof(double));
+			logprt = 0.0;
+			memset(numer, 0, num_covar*sizeof(double));
 			
 			/* Normalize max to 1 */
 			l_last = nskipped[k] + nlisted[k];
-			max_u = u[0];
+			max_xbeta = xbeta[0];
 			for (l=0; l<l_last; l++) {
-				if (max_u < u[l]){
-					max_u = u[l];
+				if (max_xbeta < xbeta[l]){
+					max_xbeta = xbeta[l];
 				};
 			}
 			for (l=0; l<l_last; l++) {
-				u[l] -= max_u;
+				xbeta[l] -= max_xbeta;
 			}
 
-			/* Accumulate logit denominator and gradient's numerator over skipped choices */
+			/* Accumulate logit denominator and gradient's numerator over 
+             * skipped choices */
 			l_last = nskipped[k];
 			for (l=0; l<l_last; l++){
-				v[l] = exp(u[l]);
-				denom += v[l];
+				expxbeta[l] = exp(xbeta[l]);
+				denom += expxbeta[l];
 			}
-			u += l_last;
-
-			dgemv(chn, &num_covariates, &l_last, &one, \
-				X, &num_covariates, v, &onei, &zero, numer, &onei);
-			X += num_covariates*l_last;
+			dgemv(chn, &num_covar, &l_last, &one, \
+				X, &num_covar, expxbeta, &onei, &zero, numer, &onei);
+            
+            /* Advance the pointers */
+			xbeta += l_last;
+            X += num_covar*l_last;
 			
-			/* Go over the preference list in reverse order */
+			/* Go over the preference list in reverse */
 			l_last = nlisted[k];
 			for (l=0; l<l_last; l++) {
-				xb = *u++;
-				expu = exp(xb);
-				denom += expu;
-				for (j=0; j<num_covariates; j++) {
+				xb = *xbeta++;
+				expxb = exp(xb);
+				denom += expxb;
+				for (j=0; j<num_covar; j++) {
 					x = *X++;
-					numer[j] += expu*x;
-					dpr_mult[j] += x - numer[j]/denom;
+					numer[j] += expxb*x;
+					dlogprt_db[j] += x - numer[j]/denom;
 				}
-				logpr_type += xb - log(denom);
+				logprt += xb - log(denom);
 			}
 			
-			memcpy(dpr_type_db, dpr_mult, num_covariates*sizeof(double));
-			dpr_type_db += num_covariates;
-			
-			pr_type[k] = exp(logpr_type);
+			dlogprt_db += num_covar;
+			prt[k] = exp(logprt);
 		}
-				
-		free(dpr_mult);
+        
 		free(numer);
-		free(v);
+		free(expxbeta);
 	}
 	
-	dgemv(chn, &num_agents, &num_types, \
-				&one, pr_type_first, &num_agents, w_t, &onei, &zero, pr_first, &onei);
+	dgemv(chn, &num_agents, &num_types, &one,\
+            prt_first, &num_agents, w_t, &onei, &zero, pr_first, &onei);
 
 	/*-------------------------------------------------------------------------
 	 * Accumulate gradients
 	 *-----------------------------------------------------------------------*/
 	/* Reset the pointers */
-	pr_type = pr_type_first;
-	dpr_type_db = dpr_type_db_first;
-	dldb = dldb_first;
+	prt = prt_first;
+	dlogprt_db = dlogprt_db_first;
+	dl_dbeta = dl_dbeta_first;
 	
 	for (i=0; i<num_types; i++) {
 
@@ -211,20 +233,20 @@ double lcexplogit(double *raw_param,\
 			
 			/* Compute conditional-to-marginal probability ratio. This is a
 			 * common multiplier in all gradient terms */
-			p_ratio = weight[k]*w_cur*(*pr_type++)/(*pr++);
+			p_ratio = weight[k]*w_cur*(*prt++)/(*pr++);
 			
 			/* Accumulate parts of the gradient responsible for type mix */
-			dldw[i] += p_ratio - weight[k]*w_cur;
+			dl_dalpha[i] += p_ratio - weight[k]*w_cur;
 			
-			for (j=0; j<num_covariates; j++) {
+			for (j=0; j<num_covar; j++) {
 				
-				dldb[j] += p_ratio*(*dpr_type_db++);
+				dl_dbeta[j] += p_ratio*(*dlogprt_db++);
 				
 			}
 			
 		}
 		
-		dldb += num_covariates;
+		dl_dbeta += num_covar;
 		
 	}
 	
@@ -240,22 +262,21 @@ double lcexplogit(double *raw_param,\
 	}
 	
 	/* Save the gradient */
-	
 	for (i=1; i<num_types; i++) {
-		*grad++ = dldw[i];
+		*grad++ = dl_dalpha[i];
 	}
-	dldb = dldb_first;
-	for (j=0; j<num_types*num_covariates; j++) {
-		*grad++ = dldb[j];
+	dl_dbeta = dl_dbeta_first;
+	for (j=0; j<num_types*num_covar; j++) {
+		*grad++ = dl_dbeta[j];
 	}
 	
 	free(w_t);
 	free(pr_first);
-	free(pr_type_first);
-	free(dpr_type_db_first);
-	free(dldw);
-	free(dldb);
-	free(u_first);
+	free(prt_first);
+	free(dlogprt_db_first);
+	free(dl_dalpha);
+	free(dl_dbeta);
+	free(xbeta_first);
 
 	return loglik;
 
