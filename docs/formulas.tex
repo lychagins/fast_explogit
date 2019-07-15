@@ -1,22 +1,38 @@
 \documentclass[12pt]{article}
 \usepackage{hyperref}
-\usepackage{natbib}
 \usepackage[english]{babel}
 \usepackage{amsmath,amsthm,amssymb}
 \usepackage[onehalfspacing]{setspace}
-\usepackage{lscape}
 \usepackage{caption}
 \usepackage{geometry}
 \usepackage{graphicx}
-\usepackage{epstopdf}
+\usepackage{listings}
+\usepackage{color}
 
 \geometry{left=1in,right=1in,top=1in,bottom=1in}
 \onehalfspacing
 
 
-\begin{document}
 
-\section{Theory}
+\begin{document}
+	
+	\lstset{language=Matlab,
+		aboveskip=3mm,
+		belowskip=3mm,
+		showstringspaces=false,
+		columns=flexible,
+		basicstyle={\small\ttfamily},
+		numbers=none,
+		numberstyle=\tiny\color{gray},
+		keywordstyle=\color{blue},
+		commentstyle=\color{dkgreen},
+		stringstyle=\color{mauve},
+		breaklines=true,
+		breakatwhitespace=true,
+		tabsize=3
+	}
+
+\section{Background}
 
 There are $N$ agents in the sample. Agent $i$ chooses $K_i$ most preferred options from a personal choice set $C_i$ and ranks them in the order of preference. $L_i$ denotes $i$'s preference list, whereas $L_{ik}$ stands for $k^{th}$ best item.
 
@@ -139,6 +155,54 @@ Note that the loops in \ref{loop:2a} and \ref{loop:2b} run most efficiently if d
 
 \section{Usage}
 
+\subsection{Compressing the choice data}
+
+\texttt{[choice\_idx, block\_start, nskipped, nlisted, agent\_idx] = prepare\_data(chset\_mask, preflist)}
+
+\begin{tabular}{lp{0.5\textwidth}ll}\\\hline\hline
+	Name 		& Description & Dimensions & Type\\\hline
+	
+	\multicolumn{4}{c}{Arguments}\\\hline
+	
+	chset\_mask & A matrix marking individual choice sets. Rows correspond to choices, columns correspond to agents,  & $\max\limits_{1\leq i \leq N}C_i \times M$ & logical\\
+	
+	preflist    & A matrix of individual preference lists. Rows correspond to priority (first row --- top choice), columns correspond to agents. Each element of the matrix, preflist(i,j), is either zero or a valid row index for chset\_mask.  & $\max\limits_{1\leq i \leq N}K_i \times M$ & uint16\\\hline
+	
+	\multicolumn{4}{c}{Return values}\\\hline
+	
+	choice\_idx		& Choice sets and cleaned preference lists in the sparse format, & $C$ & uint16 \\
+	block\_start & Starting index for each student's block in choice\_idx, & $N$ & uint64 \\
+	nskipped & Number of skipped choices for each agent, & $N$ & uint16 \\
+	nlisted & Number of listed choices for each agent, & $N$ & uint16 \\
+	agent\_idx & Optional argument. Agent index (column index for chset\_mask and preflist). & $C$ & uint64 \\  \hline\hline
+\end{tabular}\\
+
+This function cleans and compresses data on available and realized choices agent by agent. Its output can be used to construct control variables (choice\_idx and agent\_idx) and to communicate the structure of the compressed data to the estimation algorithms (nskipped and nlisted).
+
+The algorithm purges invalid entries of preference lists including:
+\begin{enumerate}
+	\item Zeros,
+	\item Valid choice indices if the respective choices are not in the agent's choice set,
+	\item Repeating choice indices; only the highest ranked occurrences of such choices are retained.
+\end{enumerate}
+The length of agent $i$'s preference list, $K_i$, is inferred as the number of remaining choices in $i$'s preference list after the above deletions.
+
+
+The first return argument, choice\_idx, is similar to IR in the standard MATLAB sparse array structure. It is composed of blocks: the choice set of the first agent is followed by one of the second agent, and so on.  The main difference between choice\_idx and IR is that the elements of choice\_idx follow are arranged in the reverse preference order. Agent $i$'s block in choice\_idx starts with nskipped(i) elements of $i$'s choice set that are not a part of $i$'s preference list, followed by nlisted(i) elements of the preference list, in the reverse order.
+
+The second return argument, block\_start, is similar to JC in MATLAB's sparse matrix representation: it points at the first element of $i$'s block in choice\_idx. One can easily obtain block\_start from nlisted and nskipped:
+\begin{lstlisting}
+	block_start = cumsum([1; nskipped+nlisted]);
+\end{lstlisting}
+
+An optional return argument agent\_idx provides an easy mapping for choice\_idx into agent indices. A typical use case is interacting choice and agent-specific characteristics:
+\begin{lstlisting}
+	x_interaction = x_choice(choice_idx).*x_agent(agent_idx);
+\end{lstlisting}
+
+\clearpage
+
+
 \subsection{Exploded logit}
 \texttt{[logl, grad] = explogit(beta, X, nskipped, nlisted, weight)}
 
@@ -175,6 +239,7 @@ $M$ is the number of covariates in $X_{ij}$. $C$ is the total number of agent-ch
 	\multicolumn{4}{c}{Return values}\\\hline
 	logl		& Loglikelihood function, & 1 & double\\
 	grad		& Gradient of logl. & $(M+1)T-1$ & double\\\hline\hline
-\end{tabular}
+\end{tabular}\\
 
+$M$ is the number of covariates in $X_{ij}$. $C$ is the total number of agent-choice combinations: $C=\sum_{i=1}^NC_i$.
 \end{document}
